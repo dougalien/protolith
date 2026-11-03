@@ -6,11 +6,11 @@ forsterite, fayalite and monticellite; plagioclase onto anorthite, albite and K-
 non-negative least-squares fit on its cations.  This uses only the phase's oxide composition, so it is the
 same for both of Magma's engines and does not depend on how either solution model chooses end members.
 
-Nothing is dropped silently.  Whatever part of a phase the chosen minerals cannot hold (titanium today,
-since Reaction's database has no Ti minerals; manganese; a phase with no counterpart at all) is listed in
-``Recast.left_over`` with its grams of oxide and a sentence for the card.  Closing those gaps (rutile,
-ilmenite, titanite and ulvospinel from the Holland and Powell dataset, with aqueous Ti fitted to rutile
-solubility) is the next step of the shared-data plan.
+Nothing is dropped silently.  Whatever part of a phase the chosen minerals cannot hold (manganese, the
+magnesium of geikielite, a phase with no counterpart at all) is listed in ``Recast.left_over`` with its
+grams of oxide and a sentence for the card.  Titanium goes on as rutile, ilmenite or sphene (titanite),
+which Reaction can react now that dissolved Ti is defined from rutile solubility
+(``reaction/thermo/titanium.py``).
 
 Mineral formulas are the ideal end-member formulas; ``tests/protolith/test_reaction_link.py`` checks each
 against Reaction's own database when that data is installed.
@@ -52,26 +52,28 @@ FORMULAS = {
     "clinochlore": "Mg5Al2Si3O18H8", "daphnite": "Fe5Al2Si3O18H8",
     "kyanite": "Al2SiO5", "sillimanite": "Al2SiO5", "andalusite": "Al2SiO5", "corundum": "Al2O3",
     "nepheline": "NaAlSiO4", "kalsilite": "KAlSiO4", "hydroxyapatite": "Ca5P3O13H",
+    # titanium minerals: in Reaction's data once dissolved Ti is defined (reaction/thermo/titanium.py)
+    "rutile": "TiO2", "ilmenite": "FeTiO3", "sphene": "CaTiSiO5",
 }
 
-_PX = ("diopside", "hedenbergite", "enstatite", "ferrosilite", "jadeite", "Ca-Al-pyroxene", "K-feldspar")
-_SPL = ("spinel", "magnetite", "chromite", "hematite")
+_PX = ("diopside", "hedenbergite", "enstatite", "ferrosilite", "jadeite", "Ca-Al-pyroxene", "rutile")
+_SPL = ("spinel", "magnetite", "chromite", "hematite", "ilmenite")     # ulvospinel's Ti as ilmenite
 # sample phase name -> the Reaction minerals it is recast onto
 RECIPES = {
     "olivine": ("forsterite", "fayalite", "monticellite"),
     "feldspar": ("anorthite", "albite", "K-feldspar"), "alkali-feldspar": ("anorthite", "albite", "K-feldspar"),
     "plagioclase": ("anorthite", "albite", "K-feldspar"),
-    "clinopyroxene": _PX[:-1], "pigeonite": _PX[:-1], "orthopyroxene": _PX[:-1],
-    "spinel": _SPL, "titanomagnetite": _SPL, "rhombohedral": ("hematite", "magnetite"),
-    "garnet": ("pyrope", "almandine", "grossular", "andradite"),
-    "hornblende": ("tremolite", "pargasite", "glaucophane", "grunerite", "K-feldspar"),
-    "biotite": ("phlogopite", "annite", "muscovite"),
+    "clinopyroxene": _PX, "pigeonite": _PX, "orthopyroxene": _PX,
+    "spinel": _SPL, "titanomagnetite": _SPL, "rhombohedral": ("ilmenite", "hematite", "magnetite", "rutile"),
+    "garnet": ("pyrope", "almandine", "grossular", "andradite", "rutile"),
+    "hornblende": ("tremolite", "pargasite", "glaucophane", "grunerite", "K-feldspar", "rutile"),
+    "biotite": ("phlogopite", "annite", "muscovite", "rutile"),
     "muscovite": ("muscovite", "paragonite", "phlogopite", "annite"),
     "cordierite": ("cordierite", "spinel", "quartz"), "epidote": ("clinozoisite", "epidote"),
     "chlorite": ("clinochlore", "daphnite"),
     "quartz": ("quartz",), "coesite": ("coesite",), "kyanite": ("kyanite",), "sillimanite": ("sillimanite",),
     "andalusite": ("andalusite",), "corundum": ("corundum",), "nepheline": ("nepheline", "kalsilite"),
-    "apatite": ("hydroxyapatite",),
+    "apatite": ("hydroxyapatite",), "rutile": ("rutile",), "sphene": ("sphene",), "titanite": ("sphene",),
 }
 # phases Reaction has only as a polymorph: carried as that mineral, and the card says so
 STAND_INS = {"tridymite": "quartz", "cristobalite": "quartz", "stishovite": "quartz"}
@@ -246,8 +248,8 @@ def card_for(sample: Sample, grams: float = 1000.0, take: str = "rock") -> Recas
         out.reactants.append(glass_reactant(name, rest, g, f"the part of a {app} sample not on the card as "
                                                          f"minerals ({', '.join(sorted(rest))}), as a glass"))
         out.notes.append(f"{g:.3g} g goes on as the glass '{name}' ({', '.join(sorted(rest))}), dissolving "
-                         f"congruently; where Reaction has no species for an element (titanium today) the run "
-                         f"leaves it out and says so")
+                         f"congruently; where Reaction has no dissolved species for an element the run leaves it "
+                         f"out and says so")
     if melt_g > 0:
         out.reactants.append(glass_reactant(f"{app} glass {_t(sample)}", sample.melt["wt_pct"], melt_g * f,
                                             f"the melt of a {app} sample at {_t(sample)} and "

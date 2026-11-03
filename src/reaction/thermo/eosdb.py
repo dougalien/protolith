@@ -22,7 +22,7 @@ import numpy as np
 from ..constants import LN10, R
 from ..database.model import (GridLogK, Kind, Provenance, Species, ThermoDatabase,
                               ThermoRangeError)
-from . import electrostatics, water
+from . import electrostatics, titanium, water
 from .crystal import CrystalSpecies
 from .hkf import HKFSpecies, WaterStateError
 from pathlib import Path
@@ -54,6 +54,7 @@ DEFAULT_MASTERS = {
     "Si": "SiO2", "Al": "Al+3", "Fe": "Fe+2", "Mn": "Mn+2", "Zn": "Zn+2", "Cu": "Cu+2",
     "Pb": "Pb+2", "Cd": "Cd+2", "Ni": "Ni+2", "Co": "Co+2", "Ag": "Ag+", "Hg": "Hg+2",
     "N": "NH3", "P": "HPO4-2", "B": "B(OH)3", "As": "H2AsO4-", "Cr": "CrO4-2",
+    "Ti": "Ti(OH)4",                     # not in OBIGT: defined from rutile solubility (thermo/titanium.py)
 }
 
 # Helgeson (1969) B-dot, kg/mol, on the grid of the EQ3/6 databases
@@ -294,6 +295,23 @@ def build_eos_database(data: ObigtData, *, masters: dict[str, str] | None = None
         add_basis(mname, sp.formula, dict(sp.elements), sp.charge, sp=sp, section="master")
         species[mname].activity_type = -1 if mname in _NONPOLAR else 0
 
+    # titanium: OBIGT has rutile, ilmenite and titanite but no dissolved Ti, so the hydrolysis species
+    # are defined from rutile solubility (Knauss et al. 2001; see thermo/titanium.py)
+    ti_aqueous: list[tuple[ObigtSpecies, object]] = []
+    rutile = data.polymorphs("rutile")
+    if masters.get("Ti") == titanium.MASTER and "Ti" not in master_objs and rutile and "rutile" not in exclude:
+        rut = _Crystal([p.eos for p in rutile])
+        for name, formula, els, z, key, n_w, n_h in titanium.SPECIES:
+            sp = ObigtSpecies(name, "aq", formula, dict(els), z, "Knauss2001", None, "thermo/titanium.py",
+                              (titanium.SOURCE, ""))
+            prov_ = titanium.TiProvider(key, rut, providers[WATER], providers[PROTON], n_w, n_h)
+            if name == titanium.MASTER:
+                master_objs["Ti"] = _Master(name, dict(els), z)
+                providers[name] = prov_
+                add_basis(name, formula, dict(els), z, sp=sp, section="master")
+            else:
+                ti_aqueous.append((sp, prov_))
+
     def reaction_for(name: str, sp: ObigtSpecies, provider, kind: Kind, volume=None):
         nu = _formation(sp.elements, sp.charge, master_objs)
         if nu is None or any(k not in species for k in nu):
@@ -322,6 +340,11 @@ def build_eos_database(data: ObigtData, *, masters: dict[str, str] | None = None
         providers[name] = provider
         if not reaction_for(name, sp, provider, Kind.AQUEOUS):
             providers.pop(name, None)
+
+    for sp, provider in ti_aqueous:
+        providers[sp.name] = provider
+        if not reaction_for(sp.name, sp, provider, Kind.AQUEOUS):
+            providers.pop(sp.name, None)
 
     # gases and liquids
     for (name, state), sp in sorted(data.species.items()):

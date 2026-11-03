@@ -52,11 +52,12 @@ def test_glass_oxides_put_iron_as_feo_with_its_ferric_share():
     assert ox["FeO"] / ox["SiO2"] == pytest.approx((n2 + n3) * 71.8444 / 50.0, rel=1e-5)
 
 
-def test_titanium_goes_on_as_a_rest_glass_not_dropped(sample):
+def test_titanium_goes_on_as_titanium_minerals(sample):
     card = card_for(sample, 1000.0, "rock")
-    rest = [r for r in card.reactants if r["name"].startswith("rest of")]
-    if any("TiO2" in v for v in card.left_over.values()):
-        assert rest and "TiO2" in rest[0]["oxides"]
+    assert not any("TiO2" in v for v in card.left_over.values())
+    names = {r["name"] for r in card.reactants}
+    if any(p.wt_pct.get("TiO2", 0) > 0 for p in sample.phases):
+        assert names & {"rutile", "ilmenite", "sphene"}
 
 
 def test_rock_only_drops_the_melt_and_keeps_the_parent(sample):
@@ -142,4 +143,5 @@ def test_reaction_reacts_a_magma_sample(sample):
     assert all(v is not None for v in run["properties"]["pH"])
     assert run["elements"]["Si"][-1] > 1e-5                    # the rock and glass dissolve ...
     assert any(v[-1] > 0 for v in run["minerals"].values())    # ... and secondary minerals form
-    assert any("Magma glass 1100 °C" in n and "Ti is left out" in n for n in result["notes"])
+    assert run["elements"]["Ti"][-1] > 0                       # titanium reaches the fluid ...
+    assert not any("Ti is left out" in n for n in result["notes"])
