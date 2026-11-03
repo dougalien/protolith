@@ -302,12 +302,25 @@ function fillSampleSteps(st) {
   sel.dataset.key = key;
   sel.replaceChildren(...want.map(([v, t]) => h("option", { value: v }, t)));
   sel.value = wasLast || !want.some((w) => w[0] === keep) ? (want.length ? want[want.length - 1][0] : "") : keep;
-  $("dl-sample").disabled = !want.length || !!st.sample_error;
+  $("dl-sample").disabled = $("send-sample").disabled = !want.length || !!st.sample_error;
+  $("send-box").hidden = !st.can_send;
   $("smp-note").textContent = st.sample_error ? `Saving samples is off for this run: ${st.sample_error}` : "";
 }
 $("dl-sample").addEventListener("click", () => {
   const a = h("a", { href: `/api/sample?step=${encodeURIComponent($("smp-step").value)}&part=${$("smp-part").value}`, download: "" });
   document.body.append(a); a.click(); a.remove();
+});
+// Inside Protolith: the step goes straight onto Reaction's card ("melt and rock" takes both, "rock only"
+// the rock), at the grams in the box per kg of water, and Reaction's window comes forward.
+$("send-sample").addEventListener("click", async () => {
+  const g = parseFloat($("send-g").value);
+  if (!(g > 0)) { $("send-g").reportValidity(); return; }
+  const part = $("smp-part").value;
+  const reply = await api("/api/send-sample", { step: $("smp-step").value, part, take: part === "all" ? "both" : "rock", grams: g });
+  if (reply.error) { $("smp-note").textContent = reply.error; return; }
+  const lines = [...(reply.problems || []), ...(reply.notes || [])];
+  $("smp-note").textContent = lines.length ? `Sent to Reaction: ${lines.join("; ")}.` : "On Reaction's card. Press Run there.";
+  if (reply.open) window.open(reply.open, "protolith-reaction");
 });
 $("dl-svg").addEventListener("click", () => download("magma_plot.svg", plot.svgText(), "image/svg+xml"));
 connect(show, (ok) => { $("pill-link").textContent = ok ? "connected" : "not connected"; $("pill-link").className = `pill ${ok ? "ok" : "bad"}`; });

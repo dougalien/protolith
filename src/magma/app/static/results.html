@@ -42,6 +42,8 @@
         <select id="smp-step" aria-label="Which step to save" style="width:auto"></select>
         <select id="smp-part" aria-label="What to keep" style="width:auto"><option value="all">melt and rock</option><option value="rock">rock only (melt left behind)</option></select>
         <button id="dl-sample">Save sample</button>
+        <span id="send-box" hidden title="Put this step on Reaction's card as reactants: its rock as minerals, its melt as a glass of its oxides"><button id="send-sample">Send to Reaction</button>
+          <input id="send-g" type="number" min="0" step="any" value="100" style="width:5em" aria-label="Grams per kg of water"> g</span>
         <span id="smp-note" class="muted"></span>
       </div>
       <h3 style="margin:12px 0 6px">Here is what we found</h3>

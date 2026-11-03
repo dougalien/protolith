@@ -119,6 +119,9 @@ class State:
         self.samples: list = []           # a protolith Sample per step (None if one could not be made)
         self.source_sample = None
         self.sample_error = ""
+        # Inside Protolith: a function(sample dict, take, grams) that puts a sample on Reaction's card
+        # and returns {"problems", "notes", "open"}.  None when Magma runs on its own.
+        self.send_sample = None
         self._stop = threading.Event()
 
     def snapshot(self) -> dict:
@@ -126,7 +129,8 @@ class State:
                 "progress": self.progress, "inputs": self.inputs, "steps": self.steps,
                 "run_id": self.run_id,
                 "notes": HP_NOTES if self.inputs.get("engine") == "hp" else NOTES, "app_version": __version__,
-                "source": self.source, "sample_error": self.sample_error}
+                "source": self.source, "sample_error": self.sample_error,
+                "can_send": self.send_sample is not None}
 
     def changed(self):
         with self.cond:
@@ -561,6 +565,16 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/stop":
                 self.state.stop()
                 return self._json({"ok": True})
+            if path == "/api/send-sample":
+                if self.state.send_sample is None:
+                    return self._error(404, "Send to Reaction works inside Protolith only")
+                smp = self.state.sample(str(body.get("step", "-1")), str(body.get("part", "all")))
+                if smp is None:
+                    return self._error(404, "no sample for that step")
+                if not smp.written_at:
+                    smp.written_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                return self._json(self.state.send_sample(smp.to_dict(), str(body.get("take", "rock")),
+                                                         float(body.get("grams", 100.0))))
         except (ValueError, TypeError) as exc:
             return self._error(400, str(exc))
         return self._error(404, "not found")
