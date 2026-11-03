@@ -37,6 +37,13 @@
           <button id="dl-svg" title="The plot as a vector image">Download plot</button>
         </div>
       </div>
+      <div class="row small" id="sample-row" style="margin-top:8px;gap:6px" title="A sample file holds one step's melt and minerals with their compositions, for Reaction or another Protolith module to open">
+        <span class="muted">Save a step as a sample:</span>
+        <select id="smp-step" aria-label="Which step to save" style="width:auto"></select>
+        <select id="smp-part" aria-label="What to keep" style="width:auto"><option value="all">melt and rock</option><option value="rock">rock only (melt left behind)</option></select>
+        <button id="dl-sample">Save sample</button>
+        <span id="smp-note" class="muted"></span>
+      </div>
       <h3 style="margin:12px 0 6px">Here is what we found</h3>
       <div id="story" class="story"></div>
       <div id="types" class="types"></div>

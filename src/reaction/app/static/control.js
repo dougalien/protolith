@@ -249,7 +249,24 @@ function renderRocks(s) {
   }
   const running = s.run.state === "running";
   document.querySelectorAll("#rocks button").forEach((b) => { b.disabled = running; });
+  $("open-sample").disabled = running;
 }
+// Sample files: a rock or melt saved by Magma goes on the card as reactants (minerals and glass), at the
+// grams in the rock box.  The notes say what was recast and anything Reaction cannot carry yet.
+$("open-sample").addEventListener("click", () => $("sample-file").click());
+$("sample-file").addEventListener("change", async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = "";
+  if (!file) return;
+  const g = parseFloat($("rock-g").value);
+  if (!(g > 0)) { $("rock-g").reportValidity(); return; }
+  let sample;
+  try { sample = JSON.parse(await file.text()); }
+  catch (e) { $("sample-notes").textContent = `${file.name} is not a sample file (it is not JSON).`; return; }
+  const reply = await api("/api/sample", { sample, grams: g, take: $("sample-take").value });
+  const lines = [...(reply.problems || []), ...(reply.notes || [])];
+  $("sample-notes").textContent = lines.length ? `${file.name}: ${lines.join("; ")}.` : `${file.name} is on the card.`;
+});
 // Examples: one button fills the card with a worked example; the user presses Run.  The box under the buttons says what the example
 // shows and how the card sets it up, and the fields named there are outlined on the card.
 const EXAMPLE_TARGETS = { reactants: "reactants", blocked_minerals: "blocked", kind: "kindseg", mode: "modeseg" };

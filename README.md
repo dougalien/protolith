@@ -29,6 +29,10 @@ it. `protolith.magma_link.from_step` turns any step of a Magma run into a sample
 `protolith.reaction_link.to_reactants` recasts its solids onto minerals in Reaction's database, ready for
 the reactant card.
 
+In the apps: Magma's results window has **Save sample** (pick a step, and the melt and rock or the
+rock alone; a fractional run saves the cumulate piled up so far). Reaction's card has **Open sample**:
+the rock goes on as minerals, the melt as a glass of its oxides, at the grams in the rock box.
+
 Nothing is dropped silently: whatever Reaction has no mineral for yet (titanium today) is listed with its
 grams and a sentence for the card. Closing those gaps with shared Holland & Powell data is the next step.
 

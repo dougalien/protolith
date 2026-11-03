@@ -148,6 +148,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
         if path == "/api/card":
             return self._json({"problems": s.edit_card(dict(body.get("changes", {})))})
+        if path == "/api/sample":
+            # a Protolith sample file (from Magma, say): its rock and/or melt onto the card as reactants
+            from protolith.reaction_link import card_for
+            from protolith.sample import Sample, SampleError
+            try:
+                sample = Sample.from_dict(body.get("sample"))
+                card = card_for(sample, float(body.get("grams", 1000.0)), str(body.get("take", "rock")))
+            except (SampleError, ValueError, TypeError) as exc:
+                return self._json({"problems": [str(exc)], "notes": []})
+            problems = s.edit_card({"reactants": card.reactants})
+            return self._json({"problems": problems, "notes": card.notes,
+                               "reactants": [r["name"] for r in card.reactants]})
         if path == "/api/reset":
             start = str(body.get("start") or "seawater")
             if start not in STARTING_CARDS:

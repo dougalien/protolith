@@ -180,6 +180,9 @@ class Scenario:
             data["kind"] = "path"
         if data.get("title") in ("Seawater heating",):    # the old default title
             data["title"] = ""
+        for r in data.get("reactants") or []:            # a glass brought in with a sample: known by name again
+            if isinstance(r, dict) and r.get("oxides"):
+                rocks.custom_glass(r["name"], r["oxides"], r.get("ferric_fraction", 0.0), r.get("source", ""))
         known = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in data.items() if k in known})
 
@@ -817,11 +820,24 @@ def parse_reactants(value: Any) -> list[dict]:
             raise ValueError(f"unknown unit '{unit_text}' for {item['name']} (use g, mg, ug, kg, mol or mmol)")
         unit, scale = REACTANT_UNITS[unit_text]
         name, amount = str(item["name"]).strip(), float(f"{float(item.get('amount', 0)) * scale:.12g}")
+        if item.get("oxides"):                 # a glass of a given oxide analysis (from a sample file)
+            if unit != "g":
+                raise ValueError(f"give the glass {name} in grams")
+            glass = rocks.custom_glass(name, dict(item["oxides"]), float(item.get("ferric_fraction", 0.0)),
+                                       str(item.get("source", "")))
+            out.append({"name": glass.label, "amount": amount, "unit": unit, "oxides": dict(glass.oxides),
+                        "ferric_fraction": glass.ferric_fraction, "source": glass.source})
+            continue
         rock = rocks.find_mineral_rock(name)
         if rock is not None:                   # a crystalline rock goes on the card as its minerals
             if unit != "g":
                 raise ValueError(f"give {rock.label.lower()} in grams")
             out.extend(rocks.mineral_reactants(rock, amount))
+            continue
+        glass = rocks.find(name)
+        if glass is not None and glass.key.startswith(rocks.GLASS_PREFIX):   # named again in text: keep its oxides
+            out.append({"name": glass.label, "amount": amount, "unit": unit, "oxides": dict(glass.oxides),
+                        "ferric_fraction": glass.ferric_fraction, "source": glass.source})
             continue
         out.append({"name": name, "amount": amount, "unit": unit})
     return out

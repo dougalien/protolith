@@ -172,3 +172,86 @@ def to_reactants(sample: Sample, scale_to: float | None = None) -> Recast:
         out.notes.append(f"the sample also holds {sample.melt['grams']:.3g} g of melt; to react it as glass, "
                          f"open it as a glass sample (coming next)")
     return out
+
+
+# ---- the whole card: solids as minerals, melt as glass ------------------------------------------------
+TAKE = ("rock", "melt", "both")
+MAX_ON_CARD = 12                 # Reaction's card holds at most this many reactants (scenario.MAX_REACTANTS)
+
+
+def glass_oxides(wt: dict[str, float]) -> tuple[dict[str, float], float]:
+    """(oxide wt% with total iron as FeO, Fe3+/total Fe by moles): the form Reaction's glasses take.
+    Water is left with the sample's fluid."""
+    feo, fe2o3 = wt.get("FeO", 0.0), wt.get("Fe2O3", 0.0)
+    n2, n3 = feo / 71.8444, 2 * fe2o3 / 159.6882
+    out = {ox: v for ox, v in wt.items() if ox not in ("FeO", "Fe2O3", "H2O") and v > 0}
+    if n2 + n3 > 0:
+        out["FeO"] = (n2 + n3) * 71.8444
+    s = sum(out.values())
+    out = {ox: float(f"{100 * v / s:.6g}") for ox, v in out.items()}
+    return out, (n3 / (n2 + n3) if n2 + n3 > 0 else 0.0)
+
+
+def glass_reactant(name: str, wt: dict[str, float], grams: float, source: str) -> dict:
+    oxides, ff = glass_oxides(wt)
+    return {"name": name, "amount": float(f"{grams:.6g}"), "unit": "g", "oxides": oxides,
+            "ferric_fraction": float(f"{ff:.6g}"), "source": source}
+
+
+def _t(sample: Sample) -> str:
+    return f"{sample.conditions['t_c']:.0f} °C"
+
+
+def card_for(sample: Sample, grams: float = 1000.0, take: str = "rock") -> Recast:
+    """Reactants for Reaction's card from a sample: ``take`` "rock" (the solids, as minerals), "melt" (the
+    melt, quenched to glass) or "both"; ``grams`` is the total put on the card.
+
+    Whatever the minerals cannot hold (titanium, a phase with no counterpart) and the smallest minerals
+    beyond what the card holds go on as one more glass, "rest of ...", of their oxides, so all of the
+    sample's mass is on the card."""
+    if take not in TAKE:
+        raise ValueError(f"take must be one of {', '.join(TAKE)}")
+    app = sample.written_by.get("app", "sample")
+    melt_g = sample.melt["grams"] if sample.melt and take in ("melt", "both") else 0.0
+    solid_g = sample.solid_grams if take in ("rock", "both") else 0.0
+    if melt_g + solid_g <= 0:
+        raise ValueError("this sample has no melt" if take == "melt" else "this sample has no solids")
+    f = grams / (melt_g + solid_g)
+    out = Recast()
+    if solid_g > 0:
+        out = to_reactants(sample, scale_to=solid_g * f)
+        out.notes = [n for n in out.notes if "of melt" not in n]
+    rest: dict[str, float] = {}
+    for left in out.left_over.values():
+        for ox, g in left.items():
+            rest[ox] = rest.get(ox, 0.0) + g
+    slots = MAX_ON_CARD - (1 if melt_g > 0 else 0)
+    if len(out.reactants) + (1 if rest else 0) > slots:
+        keep = slots - 1                         # one slot for the rest glass
+        extra, out.reactants = out.reactants[keep:], out.reactants[:keep]
+        for r in extra:
+            f_ = parse_formula(FORMULAS[r["name"]])
+            mm = molar_mass(FORMULAS[r["name"]])
+            for el, n in f_.items():
+                if el in ("O", "H"):
+                    continue
+                ox = next(o for o, (e, _k, _o) in OXIDE_CATION.items() if e == el and o != "Fe2O3")
+                e, k, o = OXIDE_CATION[ox]
+                rest[ox] = rest.get(ox, 0.0) + r["amount"] / mm * n / k * (k * ATOMIC_WEIGHT[e] + o * ATOMIC_WEIGHT["O"])
+        out.notes.append(f"the smallest minerals ({', '.join(r['name'] for r in extra)}) go on inside the rest "
+                         f"glass, as the card holds at most {MAX_ON_CARD} reactants")
+    if rest:
+        g = sum(rest.values())
+        name = f"rest of {app} rock {_t(sample)}"
+        out.reactants.append(glass_reactant(name, rest, g, f"the part of a {app} sample not on the card as "
+                                                         f"minerals ({', '.join(sorted(rest))}), as a glass"))
+        out.notes.append(f"{g:.3g} g goes on as the glass '{name}' ({', '.join(sorted(rest))}), dissolving "
+                         f"congruently; where Reaction has no species for an element (titanium today) the run "
+                         f"leaves it out and says so")
+    if melt_g > 0:
+        out.reactants.append(glass_reactant(f"{app} glass {_t(sample)}", sample.melt["wt_pct"], melt_g * f,
+                                            f"the melt of a {app} sample at {_t(sample)} and "
+                                            f"{sample.conditions['p_bar']:g} bar, quenched to glass"))
+    out.notes.insert(0, f"from a {app} sample at {_t(sample)} and {sample.conditions['p_bar']:g} bar; the card's "
+                        f"own temperature and pressure are not changed")
+    return out

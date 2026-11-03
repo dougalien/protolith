@@ -164,8 +164,44 @@ def olivine(fo: float = DEFAULT_FO) -> Rock:
                      f"solution can form)", (f"olivine fo{fo:g}", f"fo{fo:g}"))
 
 
+# Glasses brought in from another module (a Magma melt, quenched): an oxide analysis like basalt glass,
+# registered by name when a card carrying one is read, so the name alone finds it again in this session.
+GLASSES: dict[str, Rock] = {}
+GLASS_PREFIX = "glass_"
+
+
+def custom_glass(name: str, oxides: dict[str, float], ferric_fraction: float = 0.0, source: str = "") -> Rock:
+    """Register (or replace) a glass of this oxide analysis (wt%, total iron as FeO) under ``name``."""
+    name = re.sub(r"\s+", " ", str(name).strip())
+    if not name:
+        raise ValueError("a glass needs a name")
+    clean = {}
+    for ox, wt in oxides.items():
+        if not _OXIDE.fullmatch(ox) or ox == "H2O":
+            continue                              # water goes with the fluid, not the glass
+        m = _OXIDE.fullmatch(ox)
+        if m.group(1) not in ATOMIC_WEIGHTS:
+            raise ValueError(f"the glass {name} has an oxide this app does not know: {ox}")
+        if float(wt) < 0:
+            raise ValueError(f"the glass {name} has a negative amount of {ox}")
+        if float(wt) > 0:
+            clean[ox] = float(wt)
+    if not clean:
+        raise ValueError(f"the glass {name} has no oxides")
+    if not 0.0 <= float(ferric_fraction) <= 1.0:
+        raise ValueError(f"the ferric fraction of {name} must be between 0 and 1")
+    key = GLASS_PREFIX + re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    rock = Rock(key, name, clean, float(ferric_fraction),
+                source or "a glass of the oxide analysis brought in with the sample", (name.lower(),))
+    GLASSES[key] = rock
+    return rock
+
+
 def find(name: str) -> Rock | None:
     low = name.strip().lower().replace("_", " ")
+    for rock in GLASSES.values():
+        if low == rock.label.lower() or low == rock.key.replace("_", " "):
+            return rock
     for rock in ROCKS.values():
         if low == rock.key.replace("_", " ") or low == rock.label.lower() or low in rock.names:
             return rock
@@ -178,7 +214,7 @@ def find(name: str) -> Rock | None:
 
 def get(key: str) -> Rock:
     """The rock with this key (a named rock, or an olivine such as ``olivine_fo88``)."""
-    rock = ROCKS.get(key) or find(key)
+    rock = ROCKS.get(key) or GLASSES.get(key) or find(key)
     if rock is None:
         raise KeyError(key)
     return rock

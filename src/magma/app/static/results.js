@@ -268,6 +268,7 @@ function show(st) {
   pill.textContent = { running: `running ${st.progress[0]}/${st.progress[1]}`, done: "done", stopped: "stopped", error: "error" }[st.status] || "";
   pill.className = `pill ${st.status === "error" ? "bad" : st.status === "running" ? "warn" : "ok"}`;
   if (!has) return;
+  fillSampleSteps(st);
   const i = st.inputs;
   const melting = i.process === "melt";
   const ex = i.process === "example";
@@ -290,5 +291,23 @@ document.querySelectorAll("#view button").forEach((b) => b.addEventListener("cli
   draw();
 }));
 $("dl-csv").addEventListener("click", () => download("magma_run.csv", csv(), "text/csv"));
+// Sample files: one step's melt and minerals, for Reaction (Open sample) or another module.
+function fillSampleSteps(st) {
+  const sel = $("smp-step"), want = [];
+  if (st.source) want.push(["source", `mantle source, ${st.source.t.toFixed(0)} °C`]);
+  st.steps.forEach((s, i) => want.push([String(i), `${s.t.toFixed(0)} °C, ${s.melt_pct.toFixed(1)}% melt`]));
+  const key = want.map((w) => w[0]).join();
+  if (sel.dataset.key === key) return;
+  const keep = sel.value, wasLast = !keep || sel.selectedIndex === sel.options.length - 1;
+  sel.dataset.key = key;
+  sel.replaceChildren(...want.map(([v, t]) => h("option", { value: v }, t)));
+  sel.value = wasLast || !want.some((w) => w[0] === keep) ? (want.length ? want[want.length - 1][0] : "") : keep;
+  $("dl-sample").disabled = !want.length || !!st.sample_error;
+  $("smp-note").textContent = st.sample_error ? `Saving samples is off for this run: ${st.sample_error}` : "";
+}
+$("dl-sample").addEventListener("click", () => {
+  const a = h("a", { href: `/api/sample?step=${encodeURIComponent($("smp-step").value)}&part=${$("smp-part").value}`, download: "" });
+  document.body.append(a); a.click(); a.remove();
+});
 $("dl-svg").addEventListener("click", () => download("magma_plot.svg", plot.svgText(), "image/svg+xml"));
 connect(show, (ok) => { $("pill-link").textContent = ok ? "connected" : "not connected"; $("pill-link").className = `pill ${ok ? "ok" : "bad"}`; });

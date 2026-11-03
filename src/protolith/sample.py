@@ -126,6 +126,17 @@ class Sample:
         return Sample.from_dict(d)
 
 
+def rock_only(s: Sample) -> Sample:
+    """The same sample without its melt: the rock left when the melt is taken away (a new id, same parent)."""
+    parts = [(p.grams, p.wt_pct) for p in s.phases]
+    if s.fluid:
+        parts.append((s.fluid["grams"], s.fluid["wt_pct"]))
+    d = s.to_dict()
+    d.update(melt=None, bulk_wt_pct=mix(parts), total_grams=sum(g for g, _ in parts), id=uuid.uuid4().hex,
+             note=(s.note + "; " if s.note else "") + "rock only, melt left behind")
+    return Sample.from_dict(d)
+
+
 def _oxides(wt) -> dict[str, float]:
     if not isinstance(wt, dict):
         raise SampleError("an oxide composition must be a table of oxide: wt%")
