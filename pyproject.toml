@@ -27,6 +27,7 @@ where = ["src"]
 "magma.app" = ["static/*"]
 "reaction.app" = ["static/*"]
 "protolith.app" = ["static/*"]
+"metamorphism.app" = ["static/*"]
 "reaction" = ["data/*.tsv"]
 
 [tool.pytest.ini_options]

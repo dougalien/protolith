@@ -1,7 +1,8 @@
 # Protolith
 
-An open geochemical calculator: melting and crystallization of magma, water-rock reaction, and later
-metamorphism and surface processes, on shared thermodynamic data. Each module stands alone; a **sample**
+An open geochemical calculator in four modules on shared thermodynamic data: Magma (melting and
+crystallization), Metamorphism (stable assemblages and pseudosections), Reaction (hot water and rock) and
+Weathering (water and rock at the surface). Each module stands alone; a **sample**
 (a rock and/or fluid at a stated T and P) carries the result of one module into the next.
 
 Protolith is built from copies of the two existing apps. **Magma and Reaction themselves are not
@@ -15,7 +16,7 @@ Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.
 | Path | What it is |
 | --- | --- |
 | `src/magma/` | the Magma module (melting, crystallization; Holland & Powell and MELTS engines) |
-| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport) |
+| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport); inside Protolith it also runs as Weathering, with the low-temperature cards (`reaction/app/profiles.py`) |
 | `src/metamorphism/` | the Metamorphism module (stable assemblages at T and P, pseudosections; on the HP core) |
 | `src/protolith/core/` | the shared thermodynamic core: the Holland & Powell dataset, solution models and solver (no user interface) |
 | `src/protolith/` | shared code: the core, the sample file and the links between modules |
@@ -45,12 +46,24 @@ Metamorphism runs the same minimizer at one T and P or over a T-P grid (a pseudo
 uses the full metapelite set of White et al. (2014) on ds6.2, with MnO (`solutions_mp`, ported from
 MAGEMin and checked against MAGEMin's own results). The igneous set is the other choice.
 Its rock can come from a `.sample` file (the whole sample, the rock or the melt), and any point can be
-saved as one. It has no window yet. From the command line:
+saved as one. Its window opens from Protolith's home window (or alone with `python -m metamorphism.app`):
+pick a card or a rock, run one point or a grid, and click any cell of the diagram for its minerals, to
+save as a sample or send to Reaction. From the command line:
 
     python -m metamorphism point --rock pelite --t 600 --p 6
     python -m metamorphism grid --rock metabasite --t 450 750 25 --p 2 12 1 --out mb.pseudosection
 
 [docs/metamorphism/DESIGN.md](docs/metamorphism/DESIGN.md) has the design, the checks and the next steps.
+
+## Reaction and Weathering
+
+Inside Protolith, Reaction's engine serves two windows. **Reaction** is the hydrothermal module: its
+starting cards are seawater, fresh water heated to 300 °C and a vent fluid, and its examples are basalt
+alteration, serpentinization, boiling, supercritical seawater and vent energy. **Weathering** is the
+low-temperature module: its cards are the evaporating brine and the contaminated stream, and its
+examples are calcite dissolving, a foram sinking below the CCD, flow-through weathering of a soil, the
+evaporating lake and metals on stream clays. Each window keeps its own saved session; any card can still be
+edited into any run. Reaction on its own (`python -m reaction.app`) keeps every card.
 
 ## The sample file (version 1)
 

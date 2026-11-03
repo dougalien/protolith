@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -170,12 +170,18 @@ def _row_job(args):
     return solve_row(bulk, t_c, p, phases)
 
 
+class Stopped(Exception):
+    """Raised by ``compute`` when its ``stop`` event is set."""
+
+
 def compute(bulk: Bulk, t_c: list, p_kbar: list, workers: int | None = None, phases=None,
-            on_row=None) -> Pseudosection:
+            on_row=None, on_result=None, stop=None) -> Pseudosection:
     """Solve the grid t_c x p_kbar (degC, kbar) for `bulk`.
 
     workers: processes to run rows in (default: the CPUs less one, at most the number of rows); 1 runs
-    in this process.  on_row(done, total) is called as each row finishes."""
+    in this process.  on_row(done, total) is called as each row finishes, and on_result(i, points,
+    failed) with the row itself (i its index in the sorted pressures), so a window can draw it.
+    stop: a ``threading.Event``; once set, the rows still running are ended and ``Stopped`` is raised."""
     t_c = sorted(float(t) for t in t_c)
     p_kbar = sorted(float(p) for p in p_kbar)
     if not t_c or not p_kbar:
@@ -185,21 +191,35 @@ def compute(bulk: Bulk, t_c: list, p_kbar: list, workers: int | None = None, pha
     rows: list = [None] * len(p_kbar)
     failed = []
     jobs = [(bulk, t_c, p, phases) for p in p_kbar]
+
+    def finished(i, row, done):
+        rows[i] = row
+        if on_result:
+            on_result(i, row[0], row[1])
+        if on_row:
+            on_row(done, len(jobs))
+
     if workers <= 1:
         for i, job in enumerate(jobs):
-            rows[i] = _row_job(job)
-            if on_row:
-                on_row(i + 1, len(jobs))
+            if stop is not None and stop.is_set():
+                raise Stopped()
+            finished(i, _row_job(job), i + 1)
     else:
         # spawn, as on Windows: the same behaviour everywhere, and no fork of a threaded process
-        with ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn")) as ex:
+        ex = ProcessPoolExecutor(max_workers=workers, mp_context=multiprocessing.get_context("spawn"))
+        try:
             futs = {ex.submit(_row_job, job): i for i, job in enumerate(jobs)}
-            done = 0
-            for f in as_completed(futs):
-                rows[futs[f]] = f.result()
-                done += 1
-                if on_row:
-                    on_row(done, len(jobs))
+            pending, done = set(futs), 0
+            while pending:
+                if stop is not None and stop.is_set():
+                    _end(ex)
+                    raise Stopped()
+                ready, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
+                for f in ready:
+                    done += 1
+                    finished(futs[f], f.result(), done)
+        finally:
+            ex.shutdown(wait=True, cancel_futures=True)
     points = []
     for i, (row, fails) in enumerate(rows):
         points.append(row)
@@ -207,6 +227,15 @@ def compute(bulk: Bulk, t_c: list, p_kbar: list, workers: int | None = None, pha
     ps = Pseudosection(bulk, t_c, p_kbar, points, failed=failed)
     group(ps)
     return ps
+
+
+def _end(ex: ProcessPoolExecutor) -> None:
+    """End the worker processes now: a row can run for minutes, and Stop should not wait for it."""
+    for proc in list((getattr(ex, "_processes", None) or {}).values()):
+        try:
+            proc.terminate()
+        except Exception:                   # noqa: BLE001 - already gone
+            pass
 
 
 def group(ps: Pseudosection) -> None:

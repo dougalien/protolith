@@ -1,0 +1,23 @@
+/* Metamorphism: what app.css (shared with Magma) does not have */
+.grid4 { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px 8px; align-items: center; }
+.sourcebox { border: 1px solid var(--line); border-left: 4px solid var(--slate); border-radius: var(--radius);
+  padding: 8px 10px; margin: 8px 0 4px; }
+.seg button:disabled { color: var(--faint); cursor: not-allowed; }
+.pswrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .pswrap { grid-template-columns: minmax(0, 1fr); } }
+.psplot { position: relative; }
+.psplot svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.psplot svg text { font-family: var(--font); }
+.fieldlist { max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.fieldlist button { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 6px; text-align: left; padding: 3px 6px;
+  border-color: transparent; background: transparent; }
+.fieldlist button:hover, .fieldlist button.on { border-color: var(--accent); background: var(--accent-bg); }
+.fieldlist .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fieldlist .var { color: var(--faint); }
+.scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.scale .ramp { flex: 0 0 160px; height: 10px; border-radius: 3px; }
+.assemblage { font-size: 16px; font-weight: 600; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); margin: 4px 0 10px; }
+table.minerals td.f { font-family: var(--mono); font-size: 12px; text-align: left; white-space: normal; }
+#ps-panel { position: relative; }
+[hidden] { display: none !important; }

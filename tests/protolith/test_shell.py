@@ -49,10 +49,16 @@ def test_home_lists_the_modules(shell):
     assert status == 200 and b"Protolith" in body
     status, body = _call(_port(shell.home), "/api/modules")
     mods = {m["key"]: m for m in json.loads(body)["modules"]}
-    assert mods["magma"]["ready"] and mods["reaction"]["ready"]
-    assert not mods["metamorphism"]["ready"] and not mods["surface"]["ready"]
+    assert all(mods[k]["ready"] for k in ("magma", "reaction", "metamorphism", "weathering"))
     assert mods["magma"]["control"].endswith(f":{_port(shell.magma)}/control")
-    for key in ("magma", "reaction"):            # every icon the home window asks for is there
+    assert mods["metamorphism"]["control"].endswith(f":{_port(shell.metamorphism)}/control")
+    assert _call(_port(shell.metamorphism), "/control")[0] == 200
+    assert mods["weathering"]["control"].endswith(f":{_port(shell.weathering)}/control")
+    page = _call(_port(shell.weathering), "/control")[1].decode()
+    assert "<h1>Weathering</h1>" in page
+    assert shell.weathering.session.profile.key == "surface" and shell.reaction.session.profile.key == "hydrothermal"
+    assert shell.weathering.session.workspace != shell.reaction.session.workspace
+    for key in ("magma", "reaction", "metamorphism", "weathering"):            # every icon the home window asks for is there
         assert _call(_port(shell.home), f"/static/{key}_mark.svg")[0] == 200
     assert _call(_port(shell.home), "/favicon.ico")[0] == 200
 
@@ -97,3 +103,24 @@ def test_magma_sends_a_step_to_reaction(shell):
     names = [r["name"] for r in card.reactants]
     assert names == reply["reactants"] and "Magma glass 1100 °C" in names
     assert sum(r["amount"] for r in card.reactants) == pytest.approx(50.0, rel=2e-3)
+
+
+def test_metamorphism_sends_a_point_to_reaction(shell):
+    from reaction.app import config
+
+    if not (config.external_dir() / "OBIGT" / "inorganic_aq.csv").exists():
+        pytest.skip("Reaction's reference data is not installed")
+    st = shell.metamorphism.state
+    assert st.snapshot()["can_send"] is True
+    from metamorphism.bulk import PRESETS
+
+    st.start({"bulk": PRESETS["pelite"], "name": "pelite", "kind": "point", "t": 550, "p": 5})
+    end = time.time() + 300
+    while st.status == "running" and time.time() < end:
+        with st.cond:
+            st.cond.wait(timeout=5)
+    assert st.status == "done", st.message
+    status, body = _call(_port(shell.metamorphism), "/api/send-sample", {"i": 0, "j": 0, "grams": 20})
+    reply = json.loads(body)
+    assert status == 200 and reply["open"].endswith(f":{_port(shell.reaction)}/control"), reply
+    assert reply["reactants"] and sum(r["amount"] for r in shell.reaction.session.card.reactants) == pytest.approx(20.0, rel=2e-3)

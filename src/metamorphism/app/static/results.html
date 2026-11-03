@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metamorphism: results | Dougalien Systems</title>
+<meta name="author" content="Dougalien Systems">
+<link rel="icon" type="image/svg+xml" href="/static/metamorphism_mark.svg">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/meta.css">
+</head>
+<body>
+<div class="bar">
+  <img class="mark" src="/static/dougalien_mark.svg" alt="" width="26" height="26">
+  <h1>Metamorphism</h1>
+  <a class="brand small" href="https://dougalien.com" target="_blank" rel="noopener" title="Visit dougalien.com (opens in your browser)">by Dougalien Systems</a>
+  <span class="muted small">results</span>
+  <span class="spacer"></span>
+  <span id="pill-link" class="pill">connecting</span>
+  <span id="pill-run" class="pill" style="display:none"></span>
+</div>
+<main class="results">
+  <div id="empty" class="empty panel">
+    <h2>No results yet</h2>
+    <p>Set up a rock in the control window and press Run. A pseudosection fills in here row by row as each pressure finishes.</p>
+  </div>
+  <div id="content" style="display:none;gap:14px;flex-direction:column">
+    <section class="panel">
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <div>
+          <h2 id="title"></h2>
+          <div id="meta" class="small muted"></div>
+        </div>
+        <div class="row" id="grid-buttons">
+          <button id="dl-svg" title="The diagram as a vector image">Download diagram</button>
+          <button id="dl-ps" title="Every point of the grid, to open again later without running it">Save pseudosection</button>
+        </div>
+      </div>
+      <div id="leftout" class="warnbox" style="margin-top:8px" hidden></div>
+      <progress id="prog" value="0" max="1" style="margin-top:8px;display:none"></progress>
+      <details style="margin-top:8px"><summary>Assumptions and limits</summary><ul id="notes"></ul></details>
+    </section>
+    <section class="panel" id="ps-panel">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <label class="small muted">Shade by <select id="shade" style="width:auto"></select></label>
+        <span id="axisnote" class="hint">Click a cell to see its minerals.</span>
+      </div>
+      <div class="pswrap">
+        <div>
+          <div id="plot" class="psplot"></div>
+          <div id="scale" class="scale"></div>
+        </div>
+        <div>
+          <h3 style="margin:0 0 6px">Fields <span id="nfields" class="muted"></span></h3>
+          <div id="fields" class="fieldlist"></div>
+        </div>
+      </div>
+      <div class="tip" id="tip"></div>
+    </section>
+    <section class="panel" id="pt-panel">
+      <div id="pt-empty" class="muted">Click a cell of the diagram to see the minerals there.</div>
+      <div id="pt" hidden>
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <div class="assemblage" id="pt-label"></div>
+            <div class="facts" id="pt-facts"></div>
+          </div>
+          <div class="row small" title="A sample file holds this point's minerals with their compositions, for Reaction or another Protolith module to open">
+            <label class="small muted"><input type="checkbox" id="smp-fluid" style="width:auto"> keep the free water</label>
+            <button id="dl-sample">Save sample</button>
+            <span id="send-box" hidden title="Put this rock on Reaction's card as minerals, to react with water"><button id="send-sample">Send to Reaction</button>
+              <input id="send-g" type="number" min="0" step="any" value="100" style="width:5em" aria-label="Grams per kg of water"> g</span>
+          </div>
+        </div>
+        <div id="smp-note" class="small muted"></div>
+        <div class="tablewrap"><table class="steps minerals" id="pt-table"></table></div>
+        <div id="pt-extra" class="small muted" style="margin-top:6px"></div>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/results.js"></script>
+</body>
+</html>

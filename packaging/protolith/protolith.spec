@@ -1,5 +1,5 @@
 # PyInstaller recipe for Protolith.exe: one file holding Python, numpy, scipy, the shell and every module
-# (Magma, Reaction) with their windows and data tables.  Reaction's thermodynamic databases are not inside
+# (Magma, Reaction, Metamorphism) with their windows and data tables.  Reaction's thermodynamic databases are not inside
 # it; as for Reaction.exe they stay in %LOCALAPPDATA%\Reaction\external (scripts\fetch_references.ps1).
 # Build from the repository root with packaging\protolith\build_exe.ps1.
 from pathlib import Path
@@ -15,10 +15,12 @@ a = Analysis(
            (str(SRC / "magma" / "app" / "static"), "magma/app/static"),
            (str(SRC / "reaction" / "data" / "*.tsv"), "reaction/data"),
            (str(SRC / "reaction" / "app" / "static"), "reaction/app/static"),
+           (str(SRC / "metamorphism" / "app" / "static"), "metamorphism/app/static"),
            (str(SRC / "protolith" / "app" / "static"), "protolith/app/static"),
            (str(SRC / "protolith" / "core" / "data" / "*.tsv"), "protolith/core/data")],
     # the modules' servers are imported when the shell starts them
-    hiddenimports=["magma.app.server", "reaction.app.server", "protolith.reaction_link", "protolith.magma_link"],
+    hiddenimports=["magma.app.server", "reaction.app.server", "metamorphism.app.server", "protolith.reaction_link",
+                   "protolith.magma_link", "protolith.metamorphism_link"],
     excludes=["matplotlib", "pandas", "tkinter", "pytest", "IPython"],
 )
 pyz = PYZ(a.pure)

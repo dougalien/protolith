@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metamorphism | Dougalien Systems</title>
+<meta name="author" content="Dougalien Systems">
+<link rel="icon" type="image/svg+xml" href="/static/metamorphism_mark.svg">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/meta.css">
+</head>
+<body>
+<div class="bar">
+  <img class="mark" src="/static/dougalien_mark.svg" alt="" width="26" height="26">
+  <h1>Metamorphism</h1>
+  <a class="brand small" href="https://dougalien.com" target="_blank" rel="noopener" title="Visit dougalien.com (opens in your browser)">by Dougalien Systems</a>
+  <span class="muted small">a rock at a new temperature and pressure</span>
+  <span class="spacer"></span>
+  <button id="open-results" title="The window with the diagram and the minerals">Open results window</button>
+  <span id="pill-link" class="pill">connecting</span>
+</div>
+<main class="mcontrol">
+  <section class="panel" id="starters" style="margin-bottom:14px">
+    <h2 style="margin:0 0 4px">Start from a card</h2>
+    <p class="hint" style="margin:0 0 10px">Each card fills in a rock and a run that show it well. Change anything before you press Run.</p>
+    <h3 style="margin:6px 0">Pseudosections</h3>
+    <div class="cards" id="cards-grid"></div>
+    <h3 style="margin:12px 0 6px">One point</h3>
+    <div class="cards" id="cards-point"></div>
+  </section>
+  <section class="panel" id="card">
+    <div class="cardgrid">
+      <fieldset class="group">
+        <legend>Rock</legend>
+        <div class="row" style="align-items:flex-end">
+          <label class="f" style="flex:1">Composition<select id="preset"></select></label>
+          <button id="open-sample" title="A .sample file from Magma, Reaction or this module">Open sample…</button>
+          <input id="sample-file" type="file" accept=".sample,.json,application/json" hidden>
+        </div>
+        <div id="sample-box" class="sourcebox" hidden>
+          <div id="sample-what" class="small"></div>
+          <div class="seg" id="part" role="group" aria-label="Which part of the sample" style="margin-top:6px">
+            <button data-part="whole" class="on" title="Melt, minerals and fluid together">Whole sample</button><button data-part="rock" title="The minerals, without the melt">Rock only</button><button data-part="melt" title="The melt alone, as if it crystallized at depth">Melt only</button>
+          </div>
+        </div>
+        <div id="preset-source" class="hint" style="margin:4px 0 10px"></div>
+        <label class="f">Name<input id="name" type="text" maxlength="80" placeholder="what to call this rock"></label>
+        <div class="oxgrid" id="oxides" style="margin-top:8px"></div>
+        <div class="row sumline small"><span>Total <b id="total">0</b> wt%</span><span class="hint">Values are normalized to 100. Give iron as FeO and Fe2O3, or all as FeO.</span></div>
+        <div id="leftout" class="warnbox" style="margin-top:8px" hidden></div>
+      </fieldset>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <fieldset class="group">
+          <legend>Minerals and water</legend>
+          <div class="seg" id="system" role="group" aria-label="Phase set" style="margin-bottom:6px">
+            <button data-system="metapelite" class="on" title="White et al. (2014) on ds6.2, with MnO: garnet, staurolite, chloritoid, cordierite, micas, chlorite, the aluminosilicates and melt">Metapelite</button><button data-system="igneous" title="Holland, Green and Powell (2018) on ds6.36, Magma's set: pyroxenes, amphibole, olivine, spinel, garnet, feldspars and melt">Igneous and mafic</button>
+          </div>
+          <div class="hint" id="system-hint"></div>
+          <h3 style="margin:10px 0 6px">Water</h3>
+          <div class="seg" id="water" role="group" aria-label="Water">
+            <button data-water="excess" class="on" title="Enough water for a free fluid at every point, as usual for prograde metamorphism">In excess</button><button data-water="bulk" title="Only the rock's own H2O, so the rock can be short of water">The rock's own</button>
+          </div>
+          <div class="hint" id="water-hint" style="margin-top:6px"></div>
+        </fieldset>
+        <fieldset class="group">
+          <legend>Conditions</legend>
+          <div class="seg" id="kind" role="group" aria-label="What to calculate" style="margin-bottom:10px">
+            <button data-kind="grid" class="on" title="The stable minerals over a grid of temperature and pressure">Pseudosection</button><button data-kind="point" title="The stable minerals at one temperature and pressure">One point</button>
+          </div>
+          <div id="grid-box">
+            <div class="grid4 small muted"><span></span><span>From</span><span>To</span><span>Step</span></div>
+            <div class="grid4"><span class="small">Temperature, °C</span><input id="t0" type="number" value="450" aria-label="Temperature from"><input id="t1" type="number" value="700" aria-label="Temperature to"><input id="ts" type="number" value="50" min="1" aria-label="Temperature step"></div>
+            <div class="grid4" style="margin-top:6px"><span class="small">Pressure, kbar</span><input id="p0" type="number" value="2" step="any" aria-label="Pressure from"><input id="p1" type="number" value="10" step="any" aria-label="Pressure to"><input id="ps" type="number" value="2" min="0.1" step="any" aria-label="Pressure step"></div>
+            <div id="estimate" class="hint" style="margin-top:8px"></div>
+          </div>
+          <div id="point-box" class="grid2" hidden>
+            <label class="f">Temperature, °C<input id="t" type="number" value="600"></label>
+            <label class="f">Pressure, kbar<input id="p" type="number" value="8" step="any" min="0.1"></label>
+          </div>
+        </fieldset>
+      </div>
+    </div>
+    <div class="runbar">
+      <div id="err" class="errbox" style="display:none;margin:10px 0 0"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="run" class="primary">Run</button>
+        <button id="stop" style="display:none">Stop</button>
+        <span id="status" class="small muted"></span>
+        <span class="spacer" style="flex:1"></span>
+        <button id="open-ps" class="ghost" title="A pseudosection saved from the results window">Open saved pseudosection…</button>
+        <input id="ps-file" type="file" accept=".pseudosection,.json,application/json" hidden>
+      </div>
+      <progress id="prog" value="0" max="1" style="margin-top:8px;display:none"></progress>
+    </div>
+  </section>
+</main>
+<script src="/static/common.js"></script>
+<script src="/static/control.js"></script>
+</body>
+</html>

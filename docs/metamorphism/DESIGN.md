@@ -15,7 +15,8 @@ no Magma and no Reaction.
 | Names | `metamorphism/names.py` | Whitney and Evans (2010) abbreviations. Where one model covers several minerals, composition decides between them (Pl/Kfs, Ms/Pg, Cpx/Omp/Jd/Pgt, Amp/Gln/Cum, Ilm/Hem, Spl/Mag, Ep/Czo). |
 | Pseudosection | `metamorphism/pseudosection.py` | `compute(bulk, t_c, p_kbar)` solves the grid. Each pressure row is solved from low to high T, warm-starting from the previous point, and rows run in parallel processes. Connected cells with the same assemblage form a field. Each field has a label, a variance (F = C - phases + 2) and a label point. Boundaries are the cell edges between fields, and `mode_grid` gives one mineral's mode for contouring. Results save and load as JSON. |
 | Samples | `protolith/metamorphism_link.py` | `bulk_from_sample(sample, part="whole"/"rock"/"melt")` and `to_sample(point, bulk)`, with the source sample as parent. |
-| Command line | `python -m metamorphism point ...` / `grid ...` | Gives access to everything above until the module has a window. |
+| Window | `metamorphism/app` | A control window (rock from a card, a preset, typed oxides or a `.sample`; phase set; water; one point or a T-P grid) and a results window. A grid runs in the background with progress and Stop, and the diagram fills in row by row. Fields are shaded by variance or by one mineral's mode, labelled where the label fits and numbered where it does not. Clicking a cell lists its minerals, with Save sample and, inside Protolith, Send to Reaction. A finished grid saves and opens as a `.pseudosection` file. Port 8810, or `python -m metamorphism.app` alone. |
+| Command line | `python -m metamorphism point ...` / `grid ...` | The same calculations without a window. |
 
 ## The data
 
@@ -63,9 +64,8 @@ still leaves it out, because the igneous set has no Mn end members.
 
 1. **Speed.** A point takes 1 to 12 s, and a point where a phase appears can take up to a minute and a
    half. An 11 × 11 grid of a pelite takes several minutes on four cores.
-2. **No window yet.** The next step is a Metamorphism window in the Protolith shell. It will draw the
-   fields and boundaries, show a field's phases on click, contour modes, and offer Save sample / Send to
-   Reaction.
+2. **Modes are shaded, not contoured.** The window shades each cell by a mineral's mode; contour lines
+   would need a finer grid than most runs have.
 3. **Stepped boundaries.** Boundaries follow the grid. Refining along boundaries (bisecting edges
    between fields) would give smooth reaction lines at a fraction of the cost of a finer grid.
 4. **A metabasite set** (Green et al. 2016) for mafic rocks, ported the same way. The igneous set stands

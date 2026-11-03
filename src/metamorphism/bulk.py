@@ -116,11 +116,15 @@ def to_wt_pct(moles: np.ndarray) -> dict[str, float]:
 # (not a published analysis): a shale-derived pelite and a MORB-like basalt, each with the water of a
 # hydrated protolith.  "world median pelite" is Forshaw and Pattison (2023), the default bulk of MAGEMin's
 # metapelite set, here as wt% from its moles (with the Fe2O3 of its O and without its excess water).
+# "aluminous pelite" is rounded too: an Al- and Fe-rich, Ca-poor mudstone, the kind that grows
+# chloritoid and staurolite.
 PRESETS = {
     "pelite": {"SiO2": 59.8, "TiO2": 0.8, "Al2O3": 16.6, "FeO": 6.0, "Fe2O3": 0.6, "MnO": 0.1, "MgO": 2.6,
                "CaO": 1.1, "Na2O": 1.7, "K2O": 3.7, "H2O": 6.0},
     "metabasite": {"SiO2": 50.1, "TiO2": 1.3, "Al2O3": 14.9, "FeO": 9.0, "Fe2O3": 1.5, "MgO": 7.6,
                    "CaO": 11.4, "Na2O": 2.6, "K2O": 0.2, "H2O": 4.0},
+    "aluminous pelite": {"SiO2": 50.0, "TiO2": 0.8, "Al2O3": 26.0, "FeO": 11.0, "Fe2O3": 0.5, "MnO": 0.2,
+                         "MgO": 1.5, "CaO": 0.1, "Na2O": 0.5, "K2O": 3.5, "H2O": 6.0},
 }
 _FPWM_MOL = {"SiO2": 70.999, "Al2O3": 12.8065, "CaO": 0.771, "MgO": 3.978, "FeO": 6.342, "K2O": 2.7895,
              "Na2O": 1.481, "TiO2": 0.758, "O": 0.72933, "MnO": 0.075}
