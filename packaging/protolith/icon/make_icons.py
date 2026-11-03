@@ -1,4 +1,4 @@
-"""Build the Dougalien Systems letter marks (D, R, M, P): a letter cut from layered rock with a small fault.
+"""Build the Dougalien Systems letter marks (D, R, M, P, K): a letter cut from layered rock with a small fault.
 The layers and the fault are copied exactly from dougalien_mark.svg; only the letter outline changes."""
 import io, sys, cairosvg
 from PIL import Image
@@ -14,9 +14,10 @@ LETTERS = {
     "D": "M22 10 H58 A50 50 0 0 1 58 110 H22 Z",
     "R": "M22 10 H74 A29 29 0 0 1 90.3 63 L110 110 H82 L64.4 68 H50 V110 H22 Z M50 31 V50 H73 A9.5 9.5 0 0 0 73 31 Z",
     "P": "M22 10 H74 A29 29 0 0 1 74 68 H50 V110 H22 Z M50 31 V47 H73 A8 8 0 0 0 73 31 Z",
+    "K": "M22 10 H50 V50 L80 10 H110 L74 56 L112 110 H80 L55 73 L50 80 V110 H22 Z",
     "M": "M22 110 V10 H48 L63.5 50 L79 10 H105 V110 H81 V56 L68 88 H59 L46 56 V110 Z",
 }
-LABEL = {"D": "Dougalien Systems", "R": "Reaction", "M": "Magma", "P": "Protolith"}
+LABEL = {"K": "Kafka", "D": "Dougalien Systems", "R": "Reaction", "M": "Magma", "P": "Protolith"}
 
 def svg(letter):
     return (f'<svg role="img" aria-label="{LABEL[letter]}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">'
@@ -33,7 +34,7 @@ def ico(letter, path):
              append_images=[png(letter, s) for s in sizes[:-1]])
 
 if __name__ == "__main__":
-    for L, name in (("R", "reaction"), ("M", "magma"), ("P", "protolith")):
+    for L, name in (("R", "reaction"), ("M", "magma"), ("P", "protolith"), ("K", "kafka")):
         open(f"{name}_mark.svg", "w").write(svg(L))
         ico(L, f"{name}.ico")
         png(L, 512).save(f"{name}_512.png")

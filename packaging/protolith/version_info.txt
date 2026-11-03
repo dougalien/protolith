@@ -15,7 +15,7 @@ VSVersionInfo(
     StringFileInfo([
       StringTable('040904B0', [
         StringStruct('CompanyName', 'Dougalien Systems'),
-        StringStruct('FileDescription', 'Protolith, a geochemical calculator in modules'),
+        StringStruct('FileDescription', 'Protolith, metamorphic phase equilibria'),
         StringStruct('FileVersion', '0.0.1'),
         StringStruct('InternalName', 'Protolith'),
         StringStruct('LegalCopyright', 'Dougalien Systems'),

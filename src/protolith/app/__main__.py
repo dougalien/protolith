@@ -23,7 +23,7 @@ def _check(shell: Shell) -> int:
     try:
         with urllib.request.urlopen(f"{shell.url}/api/modules", timeout=30) as r:
             names = [m["name"] for m in __import__("json").loads(r.read())["modules"] if m["ready"]]
-        for m in (shell.magma, shell.reaction):
+        for m in (shell.magma, shell.reaction, shell.metamorphism):
             port = m.server_address[1]
             req = urllib.request.Request(f"http://127.0.0.1:{port}/control", headers={"Host": f"127.0.0.1:{port}"})
             with urllib.request.urlopen(req, timeout=30) as r:
@@ -56,6 +56,7 @@ def main() -> None:
     print(f"Home window:  {shell.url}/")
     print(f"Magma:        http://127.0.0.1:{shell.magma.server_address[1]}/control")
     print(f"Reaction:     http://127.0.0.1:{shell.reaction.server_address[1]}/control")
+    print(f"Metamorphism: http://127.0.0.1:{shell.metamorphism.server_address[1]}/control")
     print("Close this window or press Ctrl+C to stop every module.")
     if not args.no_browser:
         threading.Timer(0.5, lambda: webbrowser.open(f"{shell.url}/")).start()

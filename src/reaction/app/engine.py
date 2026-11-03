@@ -118,7 +118,7 @@ GROUP_NAMES = {"plagioclase": "albite, anorthite", "pyroxene": "enstatite, ferro
 class Engine:
     def __init__(self, data_dir: str | Path | None = None, database: str | None = None):
         self.data_dir = Path(data_dir) if data_dir else config.external_dir()
-        self.database = database or config.database()       # "current" (OBIGT) or "hp" (Protolith core)
+        self.database = database or config.database()       # "current" (OBIGT), the only data
         self._db = None
         self._load_lock = threading.Lock()
         self.run_lock = threading.Lock()
@@ -128,8 +128,7 @@ class Engine:
 
     # ---- data -----------------------------------------------------------------------------------
     def set_database(self, name: str) -> bool:
-        """Switch between OBIGT ("current") and Protolith's Holland & Powell core ("hp"); the data load again
-        on the next run.  False if ``name`` is not one of config.DATABASES or a run is going."""
+        """Switch the OBIGT preset; the data load again on the next run.  False if ``name`` is not one of config.DATABASES or a run is going."""
         if name not in config.DATABASES:
             return False
         if name == self.database:

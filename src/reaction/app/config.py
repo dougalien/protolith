@@ -21,18 +21,13 @@ def external_dir() -> Path:
     return Path.home() / ".local" / "share" / "reaction" / "external"
 
 
-DATABASES = {
-    "current": "OBIGT (SUPCRT/HKF minerals and aqueous species)",
-    "hp": "Holland & Powell minerals (Protolith core) with Miron et al. aqueous species",
-}
+# Reaction runs on OBIGT only (Douglas, 2026-11-03: Holland & Powell is for igneous and metamorphic work).
+DATABASES = {"current": "OBIGT (SUPCRT/HKF minerals and aqueous species)"}
 
 
 def database() -> str:
-    """Which thermodynamic data the engine builds: ``current`` (OBIGT, the default) or ``hp`` (the minerals
-    of Protolith's shared Holland & Powell core and the aqueous species fitted to them).  Set with
-    ``REACTION_DATABASE``."""
-    name = os.environ.get("REACTION_DATABASE", "current").strip().lower()
-    return name if name in DATABASES else "current"
+    """The thermodynamic data the engine builds: always ``current`` (OBIGT)."""
+    return "current"
 
 
 def workspace_dir() -> Path:

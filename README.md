@@ -1,7 +1,8 @@
 # Protolith
 
-An open geochemical calculator: melting and crystallization of magma, water-rock reaction, and later
-metamorphism and surface processes, on shared thermodynamic data. Each module stands alone; a **sample**
+Three apps, each its own exe: **Magma** (melting and crystallization) and **Protolith** (metamorphism:
+stable assemblages and pseudosections) on the Holland & Powell data, and **Reaction** (water and rock,
+hot and cold) on OBIGT only. No Holland & Powell data reaches Reaction. Each module stands alone; a **sample**
 (a rock and/or fluid at a stated T and P) carries the result of one module into the next.
 
 Protolith is built from copies of the two existing apps. **Magma and Reaction themselves are not
@@ -15,29 +16,39 @@ Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.
 | Path | What it is |
 | --- | --- |
 | `src/magma/` | the Magma module (melting, crystallization; Holland & Powell and MELTS engines) |
-| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport) |
+| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport), OBIGT only |
+| `src/metamorphism/` | the Metamorphism module (stable assemblages at T and P, pseudosections; on the HP core) |
 | `src/protolith/core/` | the shared thermodynamic core: the Holland & Powell dataset, solution models and solver (no user interface) |
 | `src/protolith/` | shared code: the core, the sample file and the links between modules |
 | `src/protolith/app/` | the shell: the home window, and every module running in one program |
-| `tests/core/`, `tests/magma/`, `tests/reaction/`, `tests/protolith/` | the core's tests, each module's own tests, plus the link tests |
-| `docs/magma/`, `docs/reaction/` | each module's own design notes and README |
+| `tests/core/`, `tests/magma/`, `tests/reaction/`, `tests/metamorphism/`, `tests/protolith/` | the core's tests, each module's own tests, plus the link tests |
+| `docs/magma/`, `docs/reaction/`, `docs/metamorphism/` | each module's own design notes and README |
 | `packaging/protolith/` | the build of Protolith.exe (one file with every module) |
 | `packaging/magma/`, `packaging/reaction/` | the original exe builds, kept for reference |
 
 ## The shared core
 
 `protolith.core.hp` is the Holland & Powell system every module computes with: the ds6.36 end members
-(`endmembers`), the igneous solution models including melt and fluid (`solutions`), and the Gibbs energy
+(`endmembers`, ds6.36 and ds6.2), the igneous solution models including melt and fluid (`solutions`), the
+metapelite set of White et al. (2014) (`solutions_mp`), and the Gibbs energy
 minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Magma, which now runs its
 HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
 modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
 
-Reaction can run on this core: its **Data** menu (or `REACTION_DATABASE=hp`) takes the minerals from the HP
-dataset here and the aqueous species fitted to them (Miron et al. 2016, 2017), with a bridge that keeps
-every remaining OBIGT species' own log K. OBIGT stays the default until the differences are accepted:
-[docs/reaction/HP_CORE.md](docs/reaction/HP_CORE.md) explains the design, and
-[docs/reaction/HP_COMPARISON.md](docs/reaction/HP_COMPARISON.md) (from `scripts/compare_databases.py`) lists
-every change. Next on the plan: Metamorphism runs the same minimizer on a T-P grid.
+Reaction does not use this core: it runs on OBIGT only, and `tests/reaction/test_obigt_only.py` fails if it ever loads the core.
+
+Metamorphism runs the same minimizer at one T and P or over a T-P grid (a pseudosection). By default it
+uses the full metapelite set of White et al. (2014) on ds6.2, with MnO (`solutions_mp`, ported from
+MAGEMin and checked against MAGEMin's own results). The igneous set is the other choice.
+Its rock can come from a `.sample` file (the whole sample, the rock or the melt), and any point can be
+saved as one. Its window opens from Protolith's home window (or alone with `python -m metamorphism.app`):
+pick a card or a rock, run one point or a grid, and click any cell of the diagram for its minerals, to
+save as a sample or send to Reaction. From the command line:
+
+    python -m metamorphism point --rock pelite --t 600 --p 6
+    python -m metamorphism grid --rock metabasite --t 450 750 25 --p 2 12 1 --out mb.pseudosection
+
+[docs/metamorphism/DESIGN.md](docs/metamorphism/DESIGN.md) has the design, the checks and the next steps.
 
 ## The sample file (version 1)
 

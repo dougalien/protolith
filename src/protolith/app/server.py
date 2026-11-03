@@ -1,11 +1,11 @@
 """Protolith's shell: one program that runs every module and a home window that opens them.
 
-Each module keeps its own local server and windows (Magma on 8766, Reaction on 8790, as when they run
-alone), so nothing in a module changes to live inside the shell.  The shell adds:
+Each module keeps its own local server and windows (Magma on 8766, Reaction on 8790, Metamorphism on
+8810), so nothing in a module changes to live inside the shell.  The shell adds:
 
 * a home window (port 8800) that lists the modules and opens their windows;
-* hand-offs between modules in the same process: Magma's "Send to Reaction" puts a step of a Magma run
-  on Reaction's card without a file in between.
+* hand-offs between modules in the same process: Magma's and Metamorphism's "Send to Reaction" put a
+  step of a Magma run, or a point of a pseudosection, on Reaction's card without a file in between.
 
 Like the modules, the home server listens on the loopback address only and refuses requests whose Host
 or Origin is not its own, so a web page you happen to have open cannot drive it.
@@ -28,12 +28,7 @@ DEFAULT_PORT = 8800
 MAX_BODY = 100_000
 
 # Modules to come: shown on the home window so the plan is visible, not openable yet.
-PLANNED = (
-    {"key": "metamorphism", "name": "Metamorphism",
-     "about": "Rocks re-equilibrating at new temperature and pressure, with the same Holland and Powell data as Magma."},
-    {"key": "surface", "name": "Surface",
-     "about": "Weathering, soils and diagenesis at low temperature, on Reaction's water chemistry."},
-)
+PLANNED: tuple = ()
 
 
 def _url(httpd) -> str:
@@ -46,18 +41,28 @@ class Shell:
     home: ThreadingHTTPServer | None = None
     magma: ThreadingHTTPServer | None = None
     reaction: ThreadingHTTPServer | None = None
+    metamorphism: ThreadingHTTPServer | None = None
     threads: list = field(default_factory=list)
     stopped: threading.Event = field(default_factory=threading.Event)
 
     def start(self, port: int = DEFAULT_PORT, magma_port: int | None = None, reaction_port: int | None = None,
-              reaction_kw: dict | None = None) -> "Shell":
+              reaction_kw: dict | None = None, metamorphism_port: int | None = None) -> "Shell":
+        """Bind every server.  A port of None is the module's usual one and 0 asks the system for any free
+        port.  With port 0, Metamorphism also gets any free port unless given one."""
         from magma.app import server as magma_server
+        from metamorphism.app import server as metamorphism_server
         from reaction.app import server as reaction_server
+
+        if port == 0 and metamorphism_port is None:
+            metamorphism_port = 0
 
         self.magma = magma_server.make_server(magma_server.DEFAULT_PORT if magma_port is None else magma_port)
         self.reaction = reaction_server.make_server(reaction_server.DEFAULT_PORT if reaction_port is None
                                                     else reaction_port, **(reaction_kw or {}))
+        self.metamorphism = metamorphism_server.make_server(metamorphism_server.DEFAULT_PORT
+                                                            if metamorphism_port is None else metamorphism_port)
         self.magma.state.send_sample = self.send_to_reaction          # type: ignore[attr-defined]
+        self.metamorphism.state.send_sample = self.send_to_reaction   # type: ignore[attr-defined]
         self.home = _bind(port)
         self.home.shell = self                                         # type: ignore[attr-defined]
         return self
@@ -74,6 +79,7 @@ class Shell:
     # ---- what the home window shows --------------------------------------------------------------
     def modules(self) -> dict:
         from magma import __version__ as magma_version
+        from metamorphism import __version__ as metamorphism_version
         from reaction.app import config
 
         has_data = (config.external_dir() / "OBIGT" / "inorganic_aq.csv").exists()
@@ -82,10 +88,14 @@ class Shell:
              "about": "Melting and crystallization of silicate melts (Holland and Powell, or MELTS).",
              "control": f"{_url(self.magma)}/control", "results": f"{_url(self.magma)}/results"},
             {"key": "reaction", "name": "Reaction", "ready": True,
-             "about": "Water and rock: speciation, mineral reactions and reaction paths in an aqueous fluid.",
+              "about": "Water and rock: speciation, mineral reactions and reaction paths in an aqueous fluid.",
              "control": f"{_url(self.reaction)}/control", "results": f"{_url(self.reaction)}/results",
              "note": "" if has_data else ("Reaction's thermodynamic data is not installed yet; its window "
                                           "says how to get it.")},
+            {"key": "metamorphism", "name": "Protolith", "ready": True, "version": metamorphism_version,
+             "about": "A rock at a new temperature and pressure: its stable minerals at one point or over a "
+                      "pseudosection, on the same Holland and Powell data as Magma.",
+             "control": f"{_url(self.metamorphism)}/control", "results": f"{_url(self.metamorphism)}/results"},
         ]
         mods += [dict(m, ready=False) for m in PLANNED]
         return {"version": __version__, "modules": mods}
@@ -93,7 +103,7 @@ class Shell:
     # ---- running ---------------------------------------------------------------------------------
     def serve(self) -> None:
         """Serve every module in the background and the home window here, until ``stop``."""
-        for httpd in (self.magma, self.reaction):
+        for httpd in (self.magma, self.reaction, self.metamorphism):
             t = threading.Thread(target=httpd.serve_forever, daemon=True)   # type: ignore[union-attr]
             t.start()
             self.threads.append(t)
@@ -110,12 +120,12 @@ class Shell:
         threading.Thread(target=self._shutdown, daemon=True).start()
 
     def _shutdown(self) -> None:
-        for httpd in (self.magma, self.reaction, self.home):
+        for httpd in (self.magma, self.reaction, self.metamorphism, self.home):
             if httpd is not None:
                 httpd.shutdown()
 
     def close(self) -> None:
-        for httpd in (self.magma, self.reaction, self.home):
+        for httpd in (self.magma, self.reaction, self.metamorphism, self.home):
             if httpd is not None:
                 httpd.server_close()
 

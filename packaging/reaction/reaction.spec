@@ -1,17 +1,20 @@
-# PyInstaller recipe for Reaction.exe: one file holding Python, numpy, scipy, the app and its own data
-# tables.  The thermodynamic databases are not inside it; they stay in %LOCALAPPDATA%\Reaction\external.
-# Build with packaging/build_exe.ps1 (or: pyinstaller packaging/reaction.spec from the repository root).
+# PyInstaller recipe for Reaction.exe: one file holding Python, numpy, scipy, the app and its data tables.
+# OBIGT only: the Holland & Powell core, Magma and Protolith are left out.  The OBIGT databases are not inside;
+# they stay in %LOCALAPPDATA%\Reaction\external (scripts\fetch_references.ps1), as before.
+# Build from the Protolith folder with packaging\reaction\build_exe.ps1.
 from pathlib import Path
 
-ROOT = Path(SPECPATH).parent
-SRC = ROOT / "src" / "reaction"
+ROOT = Path(SPECPATH).parent.parent
+SRC = ROOT / "src"
+HERE = ROOT / "packaging" / "reaction"
 
 a = Analysis(
-    [str(ROOT / "packaging" / "reaction_exe.py")],
-    pathex=[str(ROOT / "src")],
-    datas=[(str(SRC / "data" / "*.tsv"), "reaction/data"),
-           (str(SRC / "app" / "static"), "reaction/app/static")],
-    excludes=["matplotlib", "pandas", "tkinter", "pytest", "IPython"],
+    [str(HERE / "reaction_exe.py")],
+    pathex=[str(SRC)],
+    datas=[(str(SRC / "reaction" / "data" / "*.tsv"), "reaction/data"),
+           (str(SRC / "reaction" / "app" / "static"), "reaction/app/static")],
+    hiddenimports=["protolith.reaction_link", "protolith.sample"],
+    excludes=["protolith.core", "magma", "metamorphism", "matplotlib", "pandas", "tkinter", "pytest", "IPython"],
 )
 pyz = PYZ(a.pure)
 exe = EXE(
@@ -19,6 +22,6 @@ exe = EXE(
     name="Reaction",
     console=True,          # the window shows where the app runs; closing it stops the app
     upx=False,
-    icon=str(ROOT / "packaging" / "reaction.ico"),           # the Reaction R in the Dougalien Systems style (packaging/icon/make_icons.py)
-    version=str(ROOT / "packaging" / "version_info.txt"),  # company and product in Properties > Details
+    icon=str(HERE / "reaction.ico"),
+    version=str(HERE / "version_info.txt"),
 )

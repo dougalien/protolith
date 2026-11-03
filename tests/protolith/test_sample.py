@@ -4,7 +4,7 @@ import json
 import numpy as np
 import pytest
 
-from protolith.reaction_link import FORMULAS, HP_FORMULAS, recast_phase, to_reactants
+from protolith.reaction_link import FORMULAS, recast_phase, to_reactants
 from protolith.sample import Phase, Sample, SampleError
 
 
@@ -84,15 +84,10 @@ def test_mineral_left_out_is_listed_not_dropped():
     assert sum(grams.values()) + sum(left.values()) == pytest.approx(1.0)
 
 
-def test_hp_data_carry_geikielite_and_manganese():
-    """On Reaction's Holland & Powell data the Mg of an ilmenite and the Mn of an olivine go on as minerals."""
-    wt = {"MgO": 10.0, "FeO": 40.0, "TiO2": 50.0}
-    grams, left, _ = recast_phase(Phase("rhombohedral", 1.0, wt), database="hp")
-    assert {"ilmenite", "geikielite"} <= set(grams) and not left
+def test_manganese_of_an_olivine_is_left_over():
+    """Reaction is OBIGT only: no tephroite, so an olivine's Mn is reported, not dropped."""
     ol = {"SiO2": 38.0, "MgO": 40.0, "FeO": 20.0, "MnO": 2.0}
-    grams, left, _ = recast_phase(Phase("olivine", 1.0, ol), database="hp")
-    assert "tephroite" in grams and not left
-    grams, left, _ = recast_phase(Phase("olivine", 1.0, ol))                  # OBIGT: Mn left over, as before
+    grams, left, _ = recast_phase(Phase("olivine", 1.0, ol))
     assert "MnO" in left
 
 
@@ -133,12 +128,7 @@ def test_hp_run_to_reaction_card():
 
 def test_formulas_match_reactions_database(eos_db_current):
     """Each mineral named here is in Reaction's database with the same cations."""
-    _check_formulas(eos_db_current, {n: f for n, f in FORMULAS.items() if n not in HP_FORMULAS})
-
-
-def test_formulas_match_reactions_hp_database(eos_db_hp):
-    """On the Holland & Powell data every mineral named here is there, the HP-only ones included."""
-    _check_formulas(eos_db_hp, FORMULAS)
+    _check_formulas(eos_db_current, FORMULAS)
 
 
 def _check_formulas(db, formulas):
