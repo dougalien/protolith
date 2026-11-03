@@ -2,7 +2,8 @@
 
 - ``endmembers``: G(T, P) of each end member in the ds6.36 dataset (``protolith/core/data/hp_ds636.tsv``).
 - ``solutions``: the site-fraction solution models (olivine, feldspar, pyroxenes, spinel, garnet, melt,
-  fluid and the rest of the igneous set).
+  fluid and the rest of the igneous set), plus staurolite, chloritoid and sapphirine of the metapelite
+  set (White et al. 2014).
 - ``minimize``: the equilibrium solver (linear programming with column generation, then a Newton polish),
   with an optional oxygen buffer and warm starts.
 

@@ -16,6 +16,7 @@ dev = ["pytest>=7", "matplotlib>=3.6", "pandas>=2.0"]
 magma = "magma.app.__main__:main"
 reaction-app = "reaction.app.__main__:main"
 protolith = "protolith.app.__main__:main"
+metamorphism = "metamorphism.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

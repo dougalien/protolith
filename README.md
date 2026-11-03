@@ -16,18 +16,20 @@ Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.
 | --- | --- |
 | `src/magma/` | the Magma module (melting, crystallization; Holland & Powell and MELTS engines) |
 | `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport) |
+| `src/metamorphism/` | the Metamorphism module (stable assemblages at T and P, pseudosections; on the HP core) |
 | `src/protolith/core/` | the shared thermodynamic core: the Holland & Powell dataset, solution models and solver (no user interface) |
 | `src/protolith/` | shared code: the core, the sample file and the links between modules |
 | `src/protolith/app/` | the shell: the home window, and every module running in one program |
-| `tests/core/`, `tests/magma/`, `tests/reaction/`, `tests/protolith/` | the core's tests, each module's own tests, plus the link tests |
-| `docs/magma/`, `docs/reaction/` | each module's own design notes and README |
+| `tests/core/`, `tests/magma/`, `tests/reaction/`, `tests/metamorphism/`, `tests/protolith/` | the core's tests, each module's own tests, plus the link tests |
+| `docs/magma/`, `docs/reaction/`, `docs/metamorphism/` | each module's own design notes and README |
 | `packaging/protolith/` | the build of Protolith.exe (one file with every module) |
 | `packaging/magma/`, `packaging/reaction/` | the original exe builds, kept for reference |
 
 ## The shared core
 
 `protolith.core.hp` is the Holland & Powell system every module computes with: the ds6.36 end members
-(`endmembers`), the igneous solution models including melt and fluid (`solutions`), and the Gibbs energy
+(`endmembers`), the igneous solution models including melt and fluid, with staurolite, chloritoid and
+sapphirine from the metapelite set (`solutions`), and the Gibbs energy
 minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Magma, which now runs its
 HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
 modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
@@ -37,7 +39,17 @@ dataset here and the aqueous species fitted to them (Miron et al. 2016, 2017), w
 every remaining OBIGT species' own log K. OBIGT stays the default until the differences are accepted:
 [docs/reaction/HP_CORE.md](docs/reaction/HP_CORE.md) explains the design, and
 [docs/reaction/HP_COMPARISON.md](docs/reaction/HP_COMPARISON.md) (from `scripts/compare_databases.py`) lists
-every change. Next on the plan: Metamorphism runs the same minimizer on a T-P grid.
+every change.
+
+Metamorphism runs the same minimizer at one T and P or over a T-P grid (a pseudosection), with
+staurolite, chloritoid and sapphirine from the metapelite set of White et al. (2014) added to the core.
+Its rock can come from a `.sample` file (the whole sample, the rock or the melt), and any point can be
+saved as one. It has no window yet. From the command line:
+
+    python -m metamorphism point --rock pelite --t 600 --p 6
+    python -m metamorphism grid --rock metabasite --t 450 750 25 --p 2 12 1 --out mb.pseudosection
+
+[docs/metamorphism/DESIGN.md](docs/metamorphism/DESIGN.md) has the design, the checks and the next steps.
 
 ## The sample file (version 1)
 
