@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protolith | Dougalien Systems</title>
+<meta name="author" content="Dougalien Systems">
+<link rel="icon" type="image/svg+xml" href="/static/protolith_mark.svg">
+<link rel="apple-touch-icon" href="/static/protolith_512.png">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .home { max-width: 860px; margin: 0 auto; padding: 20px 16px 40px; }
+  .lede { color: var(--muted); margin: 4px 0 18px; max-width: 62ch; }
+  .mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .mod { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px;
+         display: flex; flex-direction: column; gap: 8px; }
+  .mod.off { background: transparent; border-style: dashed; }
+  .mod .top { display: flex; align-items: center; gap: 10px; }
+  .mod img { width: 32px; height: 32px; }
+  .mod p { margin: 0; color: var(--muted); }
+  .mod .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+  .note { color: var(--warn); background: var(--warn-bg); border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  .flow { margin-top: 22px; color: var(--muted); font-size: 13px; max-width: 70ch; }
+  .flow b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <img class="mark" src="/static/dougalien_mark.svg" alt="" width="26" height="26">
+  <h1>Protolith</h1>
+  <a class="brand small" href="https://dougalien.com" target="_blank" rel="noopener" title="Visit dougalien.com (opens in your browser)">by Dougalien Systems</a>
+  <span id="ver" class="muted small"></span>
+  <span class="spacer"></span>
+  <button id="quit" title="Stop Protolith and every module (the same as closing its console window)">Quit Protolith</button>
+</div>
+<main class="home">
+  <p class="lede">A geochemical calculator in modules. Each module opens in its own windows and runs on
+    this computer; a rock or melt from one module can be handed to the next.</p>
+  <div id="mods" class="mods" aria-live="polite"></div>
+  <p class="flow"><b>Magma to Reaction:</b> in Magma's results window, pick a step and press
+    <b>Send to Reaction</b>. Its rock goes on Reaction's card as minerals, its melt as a glass of its own
+    oxides. <b>Save sample</b> writes the same thing to a file that Reaction's <b>Open sample</b> reads later.</p>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  e.append(...kids.filter((k) => k !== null && k !== undefined));
+  return e;
+}
+function openWindow(url, name) { window.open(url, name); }
+async function load() {
+  let info;
+  try { info = await (await fetch("/api/modules")).json(); }
+  catch (e) { $("mods").textContent = "Protolith is not running. Start it again to use the modules."; return; }
+  $("ver").textContent = `version ${info.version}`;
+  $("mods").replaceChildren(...info.modules.map((m) => {
+    const card = el("section", { class: `mod${m.ready ? "" : " off"}`, "aria-label": m.name },
+      el("div", { class: "top" },
+        m.ready ? el("img", { src: `/static/${m.key}_mark.svg`, alt: "" }) : null,
+        el("h2", {}, m.name),
+        m.ready ? null : el("span", { class: "pill" }, "planned")),
+      el("p", {}, m.about),
+      m.note ? el("div", { class: "note" }, m.note) : null);
+    if (m.ready) {
+      const go = el("button", { class: "primary" }, `Open ${m.name}`);
+      go.addEventListener("click", () => openWindow(m.control, `protolith-${m.key}`));
+      const res = el("button", { title: "The results in a window of its own, to drag to another screen" }, "Results window");
+      res.addEventListener("click", () => openWindow(m.results, `protolith-${m.key}-results`));
+      card.append(el("div", { class: "row" }, go, res));
+    }
+    return card;
+  }));
+}
+$("quit").addEventListener("click", async () => {
+  try { await fetch("/api/quit", { method: "POST" }); } catch (e) { /* already gone */ }
+  document.querySelector("main").replaceChildren(el("p", { class: "lede" }, "Protolith has stopped. You can close this window."));
+  $("quit").disabled = true;
+});
+load();
+</script>
+</body>
+</html>

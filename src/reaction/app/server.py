@@ -148,6 +148,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
         if path == "/api/card":
             return self._json({"problems": s.edit_card(dict(body.get("changes", {})))})
+        if path == "/api/sample":
+            return self._json(load_sample(s, body.get("sample"), body.get("grams", 1000.0), body.get("take", "rock")))
         if path == "/api/reset":
             start = str(body.get("start") or "seawater")
             if start not in STARTING_CARDS:
@@ -172,6 +174,20 @@ class Handler(BaseHTTPRequestHandler):
             s.set_view(dict(body.get("patch", {})), _window(body))
             return self._json({"ok": True})
         self._error(404, "not found")
+
+
+def load_sample(session: Session, sample, grams=1000.0, take="rock") -> dict:
+    """A Protolith sample (a dict, as in a .sample file, from Magma say): its rock and/or melt onto the
+    card as reactants.  Used by Open sample here and by Magma's Send to Reaction inside Protolith."""
+    from protolith.reaction_link import card_for
+    from protolith.sample import Sample, SampleError
+    try:
+        smp = Sample.from_dict(sample)
+        card = card_for(smp, float(grams), str(take))
+    except (SampleError, ValueError, TypeError) as exc:
+        return {"problems": [str(exc)], "notes": []}
+    problems = session.edit_card({"reactants": card.reactants})
+    return {"problems": problems, "notes": card.notes, "reactants": [r["name"] for r in card.reactants]}
 
 
 def _window(body: dict) -> str:

@@ -15,7 +15,8 @@ import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from datetime import datetime, timezone
+from urllib.parse import parse_qs, urlparse
 
 from .. import __version__
 import numpy as np
@@ -27,6 +28,8 @@ from ..melting import iter_melt
 from ..path import iter_crystallize
 from ..hp import engine as hp_engine
 from ..thermo.phases import PHASES
+from protolith.magma_link import from_step as sample_of, merge as merge_phases, step_phases
+from protolith.sample import normalized, rock_only
 
 STATIC = Path(__file__).resolve().parent / "static"
 PAGES = {"/": "control.html", "/control": "control.html", "/results": "results.html"}
@@ -113,6 +116,12 @@ class State:
         self.steps: list[dict] = []
         self.run_id = 0
         self.source: dict | None = None
+        self.samples: list = []           # a protolith Sample per step (None if one could not be made)
+        self.source_sample = None
+        self.sample_error = ""
+        # Inside Protolith: a function(sample dict, take, grams) that puts a sample on Reaction's card
+        # and returns {"problems", "notes", "open"}.  None when Magma runs on its own.
+        self.send_sample = None
         self._stop = threading.Event()
 
     def snapshot(self) -> dict:
@@ -120,7 +129,8 @@ class State:
                 "progress": self.progress, "inputs": self.inputs, "steps": self.steps,
                 "run_id": self.run_id,
                 "notes": HP_NOTES if self.inputs.get("engine") == "hp" else NOTES, "app_version": __version__,
-                "source": self.source}
+                "source": self.source, "sample_error": self.sample_error,
+                "can_send": self.send_sample is not None}
 
     def changed(self):
         with self.cond:
@@ -137,6 +147,7 @@ class State:
         self.run_id += 1
         self.inputs = inputs
         self.steps = []
+        self.samples, self.source_sample, self.sample_error = [], None, ""
         self.status, self.message = "running", ""
         n = int(round(abs(kw["t_start"] - kw["t_end"]) / kw["step"])) + 1
         self.progress = [0, n]
@@ -145,6 +156,26 @@ class State:
 
     def stop(self) -> None:
         self._stop.set()
+
+    def _sample(self, result, **kw):
+        """The step as a sample file; a failure here never stops the run, it only disables saving."""
+        try:
+            fo2 = self.inputs.get("fo2")
+            return sample_of(result, fo2=fo2 if isinstance(fo2, str) else None, run=dict(self.inputs), **kw)
+        except Exception as exc:          # noqa: BLE001 - reported in the results window
+            self.sample_error = f"{type(exc).__name__}: {exc}"
+            return None
+
+    def sample(self, step: str, part: str = "all"):
+        """The saved sample of a step ("source" for the mantle source of the example), or None."""
+        if step == "source":
+            smp = self.source_sample
+        else:
+            i = int(step)
+            smp = self.samples[i] if -len(self.samples) <= i < len(self.samples) else None
+        if smp is not None and part == "rock":
+            smp = rock_only(smp)
+        return smp
 
     def _run(self, bulk: Composition, kw: dict) -> None:
         removed: dict[str, float] = {}
@@ -155,8 +186,14 @@ class State:
                 return self._run_example(bulk, kw)
             kw = {k: v for k, v in kw.items() if k not in ("process", "engine")}
             cool = hp_engine.iter_crystallize if self.inputs.get("engine") == "hp" else iter_crystallize
+            pile: list = []
             for r in cool(bulk, **kw):
                 step = step_json(r)
+                if kw["mode"] == "fractional":
+                    pile = merge_phases(pile, step_phases(r)[0])
+                    self.samples.append(self._sample(r, solids=pile, note="melt and the cumulate removed so far"))
+                else:
+                    self.samples.append(self._sample(r))
                 if kw["mode"] == "fractional":
                     for s in step["solids"]:
                         removed[s["name"]] = removed.get(s["name"], 0.0) + s["grams"]
@@ -200,6 +237,10 @@ class State:
             melt = hp_engine.iter_melt if hp else iter_melt
             for m in melt(bulk, on_progress=progress if (hp or args["mode"] == "batch") else None, **args):
                 step = step_json(m.result)
+                pooled = ({"grams": float(m.pooled_grams), "wt_pct": normalized(dict(m.pooled.wt))}
+                          if m.pooled is not None and m.pooled_grams > 0 else None)
+                self.samples.append(self._sample(m.result, melt=pooled,
+                                                 note="residue and the melt pooled so far" if pooled else ""))
                 step["extracted_grams"] = m.extracted_grams
                 step["pooled_grams"] = m.pooled_grams
                 if m.pooled is not None:
@@ -241,6 +282,7 @@ class State:
             if self._stop.is_set():
                 raise _Stopped()
             sj = step_json(src_result)
+            self.source_sample = self._sample(src_result, note="mantle source: residue and melt")
             sj["primary"] = {ox: primary.get(ox) for ox in OXIDES if primary.get(ox) > 0}
             sj["primary_mg"] = primary.mg_number
             self.source = sj
@@ -254,8 +296,11 @@ class State:
             else:
                 path = iter_differentiate(primary, kw["t_source"], kw["t_end"], kw["step"], kw["p_bar"],
                                           kw["h2o"], kw["fo2"], kw["phases"])
+            pile: list = []
             for r in path:
                 step = step_json(r)
+                pile = merge_phases(pile, step_phases(r)[0])
+                self.samples.append(self._sample(r, solids=pile, note="melt and the cumulate removed so far"))
                 for s in step["solids"]:
                     removed[s["name"]] = removed.get(s["name"], 0.0) + s["grams"]
                     s["step_grams"] = s["grams"]
@@ -457,6 +502,26 @@ class Handler(BaseHTTPRequestHandler):
                                "example": EXAMPLE_DEFAULTS, "cards": CARDS})
         if path == "/events":
             return self._events()
+        if path == "/api/sample":
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                smp = self.state.sample(q.get("step", ["-1"])[0], q.get("part", ["all"])[0])
+            except ValueError:
+                return self._error(400, "step must be a number or 'source'")
+            if smp is None:
+                return self._error(404, "no sample for that step")
+            if not smp.written_at:
+                smp.written_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            body = json.dumps(smp.to_dict(), indent=1).encode()
+            name = f"magma_{smp.conditions['t_c']:.0f}C{'_rock' if smp.melt is None else ''}.sample"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         return self._error(404, "not found")
 
     def _events(self) -> None:
@@ -500,6 +565,16 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/stop":
                 self.state.stop()
                 return self._json({"ok": True})
+            if path == "/api/send-sample":
+                if self.state.send_sample is None:
+                    return self._error(404, "Send to Reaction works inside Protolith only")
+                smp = self.state.sample(str(body.get("step", "-1")), str(body.get("part", "all")))
+                if smp is None:
+                    return self._error(404, "no sample for that step")
+                if not smp.written_at:
+                    smp.written_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                return self._json(self.state.send_sample(smp.to_dict(), str(body.get("take", "rock")),
+                                                         float(body.get("grams", 100.0))))
         except (ValueError, TypeError) as exc:
             return self._error(400, str(exc))
         return self._error(404, "not found")

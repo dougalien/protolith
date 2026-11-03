@@ -65,21 +65,31 @@ def test_plagioclase_an60():
     assert n_an / (n_an + n_ab) == pytest.approx(0.6, abs=1e-4)
 
 
-def test_titanium_is_listed_not_dropped():
-    wt = {"FeO": 60.0, "Fe2O3": 30.0, "TiO2": 10.0}              # a titanomagnetite
+def test_titanomagnetite_titanium_goes_on_as_ilmenite():
+    wt = {"FeO": 60.0, "Fe2O3": 30.0, "TiO2": 10.0}
     grams, left, note = recast_phase(Phase("titanomagnetite", 2.0, wt))
-    assert "magnetite" in grams
-    assert left["TiO2"] == pytest.approx(0.2, rel=0.02)
-    assert "TiO2" in note and "no mineral" in note
-    assert sum(grams.values()) + sum(left.values()) == pytest.approx(2.0)
+    assert set(grams) == {"magnetite", "ilmenite"} and not left and not note
+    n_ilm = grams["ilmenite"] / 151.71
+    # every Ti in ilmenite, to within the few percent that rescaling to the phase mass moves it (the ideal
+    # minerals carry a little more or less oxygen than the phase did)
+    assert n_ilm == pytest.approx(2.0 * 0.10 / 79.866, rel=0.04)
+    assert sum(grams.values()) == pytest.approx(2.0)
+
+
+def test_mineral_left_out_is_listed_not_dropped():
+    wt = {"MgO": 10.0, "FeO": 40.0, "TiO2": 50.0}                       # an ilmenite with geikielite
+    grams, left, note = recast_phase(Phase("rhombohedral", 1.0, wt))
+    assert "ilmenite" in grams and set(left) == {"MgO"}
+    assert "MgO" in note and "no mineral" in note
+    assert sum(grams.values()) + sum(left.values()) == pytest.approx(1.0)
 
 
 def test_phase_without_counterpart_is_reported():
-    s = _sample(_olivine(), Phase("sphene", 1.0, {"CaO": 28.6, "TiO2": 40.8, "SiO2": 30.6}))
+    s = _sample(_olivine(), Phase("perovskite", 1.0, {"CaO": 41.25, "TiO2": 58.75}))
     r = to_reactants(s, scale_to=1000.0)
     assert sum(x["amount"] for x in r.reactants) == pytest.approx(1000.0 * 10 / 11, rel=1e-4)
-    assert r.left_over["sphene"]["TiO2"] == pytest.approx(1000 / 11 * 0.408, rel=1e-3)
-    assert any("sphene" in n and "not on the card" in n for n in r.notes)
+    assert r.left_over["perovskite"]["TiO2"] == pytest.approx(1000 / 11 * 0.5875, rel=1e-3)
+    assert any("perovskite" in n and "not on the card" in n for n in r.notes)
 
 
 def test_tridymite_goes_on_as_quartz():
