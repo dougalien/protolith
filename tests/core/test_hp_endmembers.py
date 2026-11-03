@@ -1,10 +1,10 @@
-"""Holland & Powell end members (magma.hp.endmembers) against their own definitions and known phase equilibria."""
+"""Holland & Powell end members (protolith.core.hp.endmembers) against their own definitions and known phase equilibria."""
 import math
 
 import pytest
 from scipy.optimize import brentq
 
-from magma.hp.endmembers import DATA, gibbs, gibbs_j
+from protolith.core.hp.endmembers import DATA, gibbs, gibbs_j
 from magma.thermo import water
 
 

@@ -23,7 +23,7 @@ import numpy as np
 
 from ..composition import MOLAR_MASS, Composition
 from ..redox import log_fo2 as _log_fo2
-from .minimize import COMPONENTS, MELT_MIN_T, PURE_PHASES, Result, equilibrate
+from protolith.core.hp.minimize import COMPONENTS, MELT_MIN_T, PURE_PHASES, Result, equilibrate
 
 _M = np.array([MOLAR_MASS["FeO"] if c == "FeO" else 15.9994 if c == "O" else MOLAR_MASS[c] for c in COMPONENTS])
 _I = {c: i for i, c in enumerate(COMPONENTS)}

@@ -1,11 +1,11 @@
-"""The Holland & Powell equilibrium solver (magma.hp.minimize) against MAGEMin equilibria."""
+"""The Holland & Powell equilibrium solver (protolith.core.hp.minimize) against MAGEMin equilibria."""
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from magma.hp.minimize import COMPONENTS, equilibrate
+from protolith.core.hp.minimize import COMPONENTS, equilibrate
 
 POINTS = json.loads((Path(__file__).parent / "data" / "hp_magemin_points.json").read_text())["points"]
 

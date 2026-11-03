@@ -214,6 +214,11 @@ lacks keep their own names (cordierite, epidote, chlorite, rutile, sphene, the A
 corundum, nepheline).  MnO, P2O5, NiO, CoO and CO2 are left out.  The engine also works below the solidus,
 so a cooling path runs until the melt is used up, and batch melting starts from the solid rock.
 
+In Protolith the dataset, solution models and solver have moved to the shared core,
+`src/protolith/core/hp/` (with `src/protolith/core/data/hp_ds636.tsv`), and their tests to
+`tests/core/`.  Only the adapter, `magma/hp/engine.py`, stays in Magma.  The file names above are the
+ones in the original Magma repository.
+
 ## The app
 
 `python -m magma.app` (or `Magma.exe`) starts a small local server and opens two browser windows,
