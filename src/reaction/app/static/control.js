@@ -98,7 +98,25 @@ function render(s) {
   pill($("pill-engine"), e.ready === false ? "data missing" : e.ready ? "data loaded" : "data loads on first run",
     e.ready === false ? "bad" : e.ready ? "ok" : "");
   $("pill-engine").title = e.message;
+  renderDatabase(s);
   renderExample(s);
+}
+
+let databaseKeys = "";
+function renderDatabase(s) {
+  const d = s.database, sel = $("database");
+  if (!d || !sel) return;
+  const keys = d.choices.map((c) => c.key).join();
+  if (keys !== databaseKeys) {
+    databaseKeys = keys;
+    sel.replaceChildren(...d.choices.map((c) => h("option", { value: c.key },
+      c.key === "hp" ? "Data: Holland & Powell (Protolith core)" : "Data: OBIGT")));
+    sel.onchange = async () => {
+      const r = await api("/api/database", { name: sel.value });
+      if (r.problems && r.problems.length) { alert(r.problems.join("\n")); }
+    };
+  }
+  if (document.activeElement !== sel) sel.value = d.name;
 }
 
 function renderFluid(s) {

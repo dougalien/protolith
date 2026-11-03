@@ -116,8 +116,9 @@ GROUP_NAMES = {"plagioclase": "albite, anorthite", "pyroxene": "enstatite, ferro
 
 
 class Engine:
-    def __init__(self, data_dir: str | Path | None = None):
+    def __init__(self, data_dir: str | Path | None = None, database: str | None = None):
         self.data_dir = Path(data_dir) if data_dir else config.external_dir()
+        self.database = database or config.database()       # "current" (OBIGT) or "hp" (Protolith core)
         self._db = None
         self._load_lock = threading.Lock()
         self.run_lock = threading.Lock()
@@ -126,6 +127,24 @@ class Engine:
         self._pool, self._pool_size = None, 0
 
     # ---- data -----------------------------------------------------------------------------------
+    def set_database(self, name: str) -> bool:
+        """Switch between OBIGT ("current") and Protolith's Holland & Powell core ("hp"); the data load again
+        on the next run.  False if ``name`` is not one of config.DATABASES or a run is going."""
+        if name not in config.DATABASES:
+            return False
+        if name == self.database:
+            return True
+        if not self.run_lock.acquire(blocking=False):
+            return False
+        try:
+            with self._load_lock:
+                self.database, self._db = name, None
+                self._advice.clear()
+                self._prepared = None
+        finally:
+            self.run_lock.release()
+        return True
+
     @property
     def db(self):
         with self._load_lock:
@@ -137,7 +156,7 @@ class Engine:
                         f"CHNOSZ csv files; scripts/fetch_references.ps1 downloads them, or set "
                         f"REACTION_DATA_DIR.")
                 ion_sizes = load_data0(eq36) if eq36.exists() else None
-                self._db = load_eos_database(obigt, "current", eq36_database=ion_sizes)
+                self._db = load_eos_database(obigt, self.database, eq36_database=ion_sizes)
             return self._db
 
     def status(self) -> dict:
@@ -975,7 +994,8 @@ class Engine:
                 take(self._sample(sc, modes, j))
         else:
             card = sc.to_dict()
-            futures = [pool.submit(_sample_in_worker, str(self.data_dir), card, modes, j) for j in range(n)]
+            futures = [pool.submit(_sample_in_worker, str(self.data_dir), self.database, card, modes, j)
+                       for j in range(n)]
             for done, fut in enumerate(as_completed(futures), start=1):
                 progress(done / n, f"Uncertainty runs: {done} of {n} done")
                 take(fut.result())
@@ -1323,11 +1343,11 @@ def _pack(rows: list[dict | None]) -> dict:
 _WORKER: "Engine | None" = None
 
 
-def _sample_in_worker(data_dir: str, card: dict, modes: list[str], j: int) -> dict:
+def _sample_in_worker(data_dir: str, database: str, card: dict, modes: list[str], j: int) -> dict:
     """One uncertainty run in a worker process, with that process's own engine."""
     global _WORKER
-    if _WORKER is None or str(_WORKER.data_dir) != data_dir:
-        _WORKER = Engine(data_dir)
+    if _WORKER is None or str(_WORKER.data_dir) != data_dir or _WORKER.database != database:
+        _WORKER = Engine(data_dir, database)
     return _WORKER._sample(Scenario.from_dict(card), modes, j)
 
 

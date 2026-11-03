@@ -14,3 +14,14 @@ def eos_db_current():
     if not (obigt / "inorganic_aq.csv").exists():
         pytest.skip(f"Reaction's reference data is not installed in {ext}")
     return load_eos_database(obigt, "current", eq36_database=load_data0(eq36) if eq36.exists() else None)
+
+
+@pytest.fixture(scope="session")
+def eos_db_hp():
+    """Reaction's database on Protolith's Holland & Powell core."""
+    from reaction.thermo.eosdb import load_eos_database
+
+    obigt = config.external_dir() / "OBIGT"
+    if not (obigt / "inorganic_aq.csv").exists():
+        pytest.skip(f"Reaction's reference data is not installed in {config.external_dir()}")
+    return load_eos_database(obigt, "hp")

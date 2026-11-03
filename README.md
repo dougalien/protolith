@@ -32,8 +32,12 @@ minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Ma
 HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
 modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
 
-Next on the plan: Reaction moves its minerals onto this core, checked case by case against its current
-results, then Metamorphism runs the same minimizer on a T-P grid.
+Reaction can run on this core: its **Data** menu (or `REACTION_DATABASE=hp`) takes the minerals from the HP
+dataset here and the aqueous species fitted to them (Miron et al. 2016, 2017), with a bridge that keeps
+every remaining OBIGT species' own log K. OBIGT stays the default until the differences are accepted:
+[docs/reaction/HP_CORE.md](docs/reaction/HP_CORE.md) explains the design, and
+[docs/reaction/HP_COMPARISON.md](docs/reaction/HP_COMPARISON.md) (from `scripts/compare_databases.py`) lists
+every change. Next on the plan: Metamorphism runs the same minimizer on a T-P grid.
 
 ## The sample file (version 1)
 
