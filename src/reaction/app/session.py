@@ -14,7 +14,6 @@ from . import analysis, carryover, config, diagrams, rocks
 from .engine import Engine, EngineUnavailable
 from .fluids import CUSTOM, CUSTOM_LABEL, PRESETS
 from .narrate import end_lists, story
-from .profiles import Profile, profile as get_profile
 from .scenario import EXAMPLES, STARTING_CARDS, Scenario, example_card, reactant_text, starting_card
 from .view import apply_patch, default_view, resolve_item, sanitize
 
@@ -34,15 +33,13 @@ GREETING = ("Tell me what to model, for example: \"heat seawater to 350 C at 500
 
 
 class Session:
-    def __init__(self, workspace: Path, engine: Engine, model: Ollama | None, profile: str | Profile = "all"):
-        # which starting cards and examples the window offers, and its name (profiles.py)
-        self.profile = profile if isinstance(profile, Profile) else get_profile(profile)
+    def __init__(self, workspace: Path, engine: Engine, model: Ollama | None):
         self.workspace = Path(workspace)
         (self.workspace / "runs").mkdir(parents=True, exist_ok=True)
         self.engine, self.model = engine, model
         self.lock = threading.RLock()
         self.subscribers: list[queue.Queue] = []
-        self.card = starting_card(self.profile.default)
+        self.card = Scenario()
         self.chat: list[dict] = []
         self.view: dict = {"items": [], "log": True, "modes": [], "unit": "mmol"}
         self.second: dict = {"current": None, "view": {}}      # the second results window
@@ -141,14 +138,12 @@ class Session:
                                    "charge_balance": spec.charge_balance,
                                    "redox": spec.redox, "redox_value": spec.redox_value,
                                    "redox_species": _couples(analysis.parse(spec.analysis, spec.units).species)},
-                    "profile": {"key": self.profile.key, "name": self.profile.name,
-                                "tagline": self.profile.tagline, "mark": self.profile.mark},
                     "starting_cards": [{"key": c.key, "label": c.label, "description": c.description}
-                                       for c in self.profile.starting_cards()],
+                                       for c in STARTING_CARDS.values()],
                     "rock_cards": rocks.rock_cards(),
                     "examples": [{"key": e.key, "label": e.label, "feature": e.feature,
                                   "description": e.description, "setup": [list(x) for x in e.setup]}
-                                 for e in self.profile.example_list()],
+                                 for e in EXAMPLES.values()],
                     "example": self.example,
                     "card_problems": self.card_problems(), "advisories": advice,
                     "chat": self.chat[-KEEP_CHAT:],
@@ -452,9 +447,8 @@ class Session:
         self._publish()
         return problems
 
-    def reset_card(self, start: str | None = None) -> None:
-        """Back to a fresh card: the window's default one, or one of the starting cards."""
-        start = start or self.profile.default
+    def reset_card(self, start: str = "seawater") -> None:
+        """Back to a fresh card: the default one, or one of the starting cards."""
         with self.lock:
             self.card = starting_card(start)
             self.mode_confirmed = False

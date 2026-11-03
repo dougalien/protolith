@@ -12,9 +12,7 @@ grams of oxide and a sentence for the card.  Titanium goes on as rutile, ilmenit
 which Reaction can react now that dissolved Ti is defined from rutile solubility
 (``reaction/thermo/titanium.py``).
 
-On Reaction's Holland & Powell data (``database="hp"``, Protolith's shared core) more of a rock goes on as
-minerals: the ulvospinel and hercynite of a spinel, the geikielite and pyrophanite of an ilmenite, and
-manganese as tephroite and spessartine.
+Reaction runs on OBIGT only: only the phases' compositions cross over, never Holland & Powell data.
 
 Mineral formulas are the ideal end-member formulas; ``tests/protolith/test_reaction_link.py`` checks each
 against Reaction's own database when that data is installed.
@@ -79,17 +77,6 @@ RECIPES = {
     "andalusite": ("andalusite",), "corundum": ("corundum",), "nepheline": ("nepheline", "kalsilite"),
     "apatite": ("hydroxyapatite",), "rutile": ("rutile",), "sphene": ("sphene",), "titanite": ("sphene",),
 }
-# minerals Reaction has only on the Holland & Powell data (reaction/thermo/hp_minerals.py, HP_ONLY)
-HP_FORMULAS = {"ulvospinel": "Fe2TiO4", "hercynite": "FeAl2O4", "geikielite": "MgTiO3",
-               "pyrophanite": "MnTiO3", "tephroite": "Mn2SiO4", "spessartine": "Mn3Al2Si3O12"}
-FORMULAS.update(HP_FORMULAS)
-_SPL_HP = ("spinel", "hercynite", "magnetite", "ulvospinel", "chromite", "hematite")
-HP_RECIPES = {
-    "olivine": ("forsterite", "fayalite", "monticellite", "tephroite"),
-    "spinel": _SPL_HP, "titanomagnetite": _SPL_HP,
-    "rhombohedral": ("ilmenite", "geikielite", "pyrophanite", "hematite", "magnetite", "rutile"),
-    "garnet": ("pyrope", "almandine", "grossular", "andradite", "spessartine", "rutile"),
-}
 # phases Reaction has only as a polymorph: carried as that mineral, and the card says so
 STAND_INS = {"tridymite": "quartz", "cristobalite": "quartz", "stishovite": "quartz"}
 
@@ -128,7 +115,7 @@ class Recast:
 
 def recipes(database: str = "current") -> dict[str, tuple[str, ...]]:
     """Sample phase -> the Reaction minerals it is recast onto, for Reaction's ``database``."""
-    return {**RECIPES, **HP_RECIPES} if database == "hp" else RECIPES
+    return RECIPES
 
 
 def recast_phase(p: Phase, database: str = "current") -> tuple[dict[str, float], dict[str, float], str]:

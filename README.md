@@ -1,8 +1,8 @@
 # Protolith
 
-An open geochemical calculator in four modules on shared thermodynamic data: Magma (melting and
-crystallization), Metamorphism (stable assemblages and pseudosections), Reaction (hot water and rock) and
-Weathering (water and rock at the surface). Each module stands alone; a **sample**
+Three apps, each its own exe: **Magma** (melting and crystallization) and **Kafka** (metamorphism:
+stable assemblages and pseudosections) on the Holland & Powell data, and **Reaction** (water and rock,
+hot and cold) on OBIGT only. No Holland & Powell data reaches Reaction. Each module stands alone; a **sample**
 (a rock and/or fluid at a stated T and P) carries the result of one module into the next.
 
 Protolith is built from copies of the two existing apps. **Magma and Reaction themselves are not
@@ -16,7 +16,7 @@ Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.
 | Path | What it is |
 | --- | --- |
 | `src/magma/` | the Magma module (melting, crystallization; Holland & Powell and MELTS engines) |
-| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport); inside Protolith it also runs as Weathering, with the low-temperature cards (`reaction/app/profiles.py`) |
+| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport), OBIGT only |
 | `src/metamorphism/` | the Metamorphism module (stable assemblages at T and P, pseudosections; on the HP core) |
 | `src/protolith/core/` | the shared thermodynamic core: the Holland & Powell dataset, solution models and solver (no user interface) |
 | `src/protolith/` | shared code: the core, the sample file and the links between modules |
@@ -35,12 +35,7 @@ minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Ma
 HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
 modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
 
-Reaction can run on this core: its **Data** menu (or `REACTION_DATABASE=hp`) takes the minerals from the HP
-dataset here and the aqueous species fitted to them (Miron et al. 2016, 2017), with a bridge that keeps
-every remaining OBIGT species' own log K. OBIGT stays the default until the differences are accepted:
-[docs/reaction/HP_CORE.md](docs/reaction/HP_CORE.md) explains the design, and
-[docs/reaction/HP_COMPARISON.md](docs/reaction/HP_COMPARISON.md) (from `scripts/compare_databases.py`) lists
-every change.
+Reaction does not use this core: it runs on OBIGT only, and `tests/reaction/test_obigt_only.py` fails if it ever loads the core.
 
 Metamorphism runs the same minimizer at one T and P or over a T-P grid (a pseudosection). By default it
 uses the full metapelite set of White et al. (2014) on ds6.2, with MnO (`solutions_mp`, ported from
@@ -54,16 +49,6 @@ save as a sample or send to Reaction. From the command line:
     python -m metamorphism grid --rock metabasite --t 450 750 25 --p 2 12 1 --out mb.pseudosection
 
 [docs/metamorphism/DESIGN.md](docs/metamorphism/DESIGN.md) has the design, the checks and the next steps.
-
-## Reaction and Weathering
-
-Inside Protolith, Reaction's engine serves two windows. **Reaction** is the hydrothermal module: its
-starting cards are seawater, fresh water heated to 300 °C and a vent fluid, and its examples are basalt
-alteration, serpentinization, boiling, supercritical seawater and vent energy. **Weathering** is the
-low-temperature module: its cards are the evaporating brine and the contaminated stream, and its
-examples are calcite dissolving, a foram sinking below the CCD, flow-through weathering of a soil, the
-evaporating lake and metals on stream clays. Each window keeps its own saved session; any card can still be
-edited into any run. Reaction on its own (`python -m reaction.app`) keeps every card.
 
 ## The sample file (version 1)
 

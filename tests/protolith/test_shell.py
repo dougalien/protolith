@@ -49,16 +49,11 @@ def test_home_lists_the_modules(shell):
     assert status == 200 and b"Protolith" in body
     status, body = _call(_port(shell.home), "/api/modules")
     mods = {m["key"]: m for m in json.loads(body)["modules"]}
-    assert all(mods[k]["ready"] for k in ("magma", "reaction", "metamorphism", "weathering"))
+    assert all(mods[k]["ready"] for k in ("magma", "reaction", "metamorphism"))
     assert mods["magma"]["control"].endswith(f":{_port(shell.magma)}/control")
     assert mods["metamorphism"]["control"].endswith(f":{_port(shell.metamorphism)}/control")
     assert _call(_port(shell.metamorphism), "/control")[0] == 200
-    assert mods["weathering"]["control"].endswith(f":{_port(shell.weathering)}/control")
-    page = _call(_port(shell.weathering), "/control")[1].decode()
-    assert "<h1>Weathering</h1>" in page
-    assert shell.weathering.session.profile.key == "surface" and shell.reaction.session.profile.key == "hydrothermal"
-    assert shell.weathering.session.workspace != shell.reaction.session.workspace
-    for key in ("magma", "reaction", "metamorphism", "weathering"):            # every icon the home window asks for is there
+    for key in ("magma", "reaction", "metamorphism"):            # every icon the home window asks for is there
         assert _call(_port(shell.home), f"/static/{key}_mark.svg")[0] == 200
     assert _call(_port(shell.home), "/favicon.ico")[0] == 200
 

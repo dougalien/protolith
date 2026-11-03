@@ -110,7 +110,7 @@ function renderDatabase(s) {
   if (keys !== databaseKeys) {
     databaseKeys = keys;
     sel.replaceChildren(...d.choices.map((c) => h("option", { value: c.key },
-      c.key === "hp" ? "Data: Holland & Powell (Protolith core)" : "Data: OBIGT")));
+      "Data: OBIGT")));
     sel.onchange = async () => {
       const r = await api("/api/database", { name: sel.value });
       if (r.problems && r.problems.length) { alert(r.problems.join("\n")); }

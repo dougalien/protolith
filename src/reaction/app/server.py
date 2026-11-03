@@ -69,7 +69,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(HTTPStatus.FORBIDDEN, "forbidden")
         path = urlparse(self.path).path
         if path in PAGES:
-            return self._page(PAGES[path])
+            return self._file(STATIC / PAGES[path])
         if path.startswith("/static/"):
             return self._file(STATIC / path[len("/static/"):])
         if path == "/api/state":
@@ -88,19 +88,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(data or {"none": True})
         if path == "/events":
             return self._events()
-        if path == "/favicon.ico":
-            return self._send(204, b"", "image/x-icon")
+        if path == "/favicon.ico":                      # the Reaction R, for browsers and pinned shortcuts that ask for it
+            return self._file(STATIC / "reaction.ico")
         self._error(404, "not found")
-
-    def _page(self, name: str) -> None:
-        """A window's page under the profile's name and icon (Weathering inside Protolith)."""
-        prof = self.session.profile
-        html = (STATIC / name).read_text(encoding="utf-8")
-        if prof.name != "Reaction":
-            html = (html.replace("<h1>Reaction</h1>", f"<h1>{prof.name}</h1>")
-                    .replace("<title>Reaction:", f"<title>{prof.name}:"))
-        html = html.replace("/static/reaction_mark.svg", f"/static/{prof.mark}")
-        self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
 
     def _file(self, path: Path) -> None:
         try:
@@ -167,14 +157,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sample":
             return self._json(load_sample(s, body.get("sample"), body.get("grams", 1000.0), body.get("take", "rock")))
         if path == "/api/reset":
-            start = str(body.get("start") or s.profile.default)
-            if start not in STARTING_CARDS or start not in s.profile.cards:
+            start = str(body.get("start") or "seawater")
+            if start not in STARTING_CARDS:
                 return self._error(400, f"unknown starting card {start!r}")
             s.reset_card(start)
             return self._json({"ok": True})
         if path == "/api/example":
             key = str(body.get("key", ""))
-            if key not in EXAMPLES or key not in s.profile.examples:
+            if key not in EXAMPLES:
                 return self._error(400, f"unknown example {key!r}")
             return self._json({"loaded": s.load_example(key)})
         if path == "/api/run":
@@ -229,10 +219,8 @@ DEFAULT_PORT = 8790
 
 def make_server(port: int | None = DEFAULT_PORT, workspace: Path | None = None,
                 engine: Engine | None = None, model: Ollama | None = None,
-                host: str = "127.0.0.1", profile: str = "all") -> ThreadingHTTPServer:
-    """Bind to ``port``; if it is taken, try the next ones.  ``port=0`` asks the system for any.
-    profile: which cards and examples the window offers and what it is called (profiles.py); inside
-    Protolith, "hydrothermal" for Reaction and "surface" for Weathering."""
+                host: str = "127.0.0.1") -> ThreadingHTTPServer:
+    """Bind to ``port``; if it is taken, try the next ones.  ``port=0`` asks the system for any."""
     candidates = [0] if port == 0 else range(port or DEFAULT_PORT, (port or DEFAULT_PORT) + 20)
     last: OSError | None = None
     for p in candidates:
@@ -244,7 +232,7 @@ def make_server(port: int | None = DEFAULT_PORT, workspace: Path | None = None,
     else:
         raise OSError(f"no free port from {port} to {port + 19}: {last}")
     httpd.session = Session(workspace or config.workspace_dir(), engine or Engine(),   # type: ignore[attr-defined]
-                            model if model is not None else Ollama(), profile)
+                            model if model is not None else Ollama())
     httpd.session.watch_model()          # type: ignore[attr-defined]
     httpd.session.preload_engine()       # type: ignore[attr-defined]
     return httpd
