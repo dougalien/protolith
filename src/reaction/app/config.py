@@ -21,6 +21,20 @@ def external_dir() -> Path:
     return Path.home() / ".local" / "share" / "reaction" / "external"
 
 
+DATABASES = {
+    "current": "OBIGT (SUPCRT/HKF minerals and aqueous species)",
+    "hp": "Holland & Powell minerals (Protolith core) with Miron et al. aqueous species",
+}
+
+
+def database() -> str:
+    """Which thermodynamic data the engine builds: ``current`` (OBIGT, the default) or ``hp`` (the minerals
+    of Protolith's shared Holland & Powell core and the aqueous species fitted to them).  Set with
+    ``REACTION_DATABASE``."""
+    name = os.environ.get("REACTION_DATABASE", "current").strip().lower()
+    return name if name in DATABASES else "current"
+
+
 def workspace_dir() -> Path:
     """Folder where saved runs and the chat session live (``workspace/`` in the repository, or
     ``%LOCALAPPDATA%\\Reaction\\workspace`` for the packaged Reaction.exe, which has no repository)."""

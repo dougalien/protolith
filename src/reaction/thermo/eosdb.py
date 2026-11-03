@@ -22,7 +22,7 @@ import numpy as np
 from ..constants import LN10, R
 from ..database.model import (GridLogK, Kind, Provenance, Species, ThermoDatabase,
                               ThermoRangeError)
-from . import electrostatics, titanium, water
+from . import electrostatics, hp_minerals, titanium, water
 from .crystal import CrystalSpecies
 from .hkf import HKFSpecies, WaterStateError
 from pathlib import Path
@@ -257,6 +257,14 @@ def _gas_name(sp: ObigtSpecies) -> str:
     return f"{sp.formula}(g)"
 
 
+def _database_of(sp: ObigtSpecies) -> str:
+    if sp.model == "HP":
+        return hp_minerals.SOURCE
+    if sp.source == "miron_aq17.tsv":
+        return hp_minerals.MIRON_SOURCE
+    return "OBIGT"
+
+
 def build_eos_database(data: ObigtData, *, masters: dict[str, str] | None = None,
                        title: str = "OBIGT/HKF", exclude: set[str] | None = None) -> EosDatabase:
     """Assemble an :class:`EosDatabase` from loaded OBIGT species."""
@@ -271,7 +279,8 @@ def build_eos_database(data: ObigtData, *, masters: dict[str, str] | None = None
                                     PROTON: _Aqueous(_h_plus())}
     species: dict[str, Species] = {}
     prov = lambda sp, section: Provenance(  # noqa: E731
-        database="OBIGT", file=sp.source, section=section, sources=[s for s in sp.refs if s and s != "NA"])
+        database=_database_of(sp), file=sp.source, section=section,
+        sources=[s for s in sp.refs if s and s != "NA"])
 
     def add_basis(name, formula, elements, charge, kind=Kind.BASIS, sp=None, section="basis"):
         species[name] = Species(
@@ -408,6 +417,9 @@ PRESETS = {
     "current": SLOP98_FILES + SUPCRT92_FILES + DEFAULT_FILES + BERMAN_FILES + ORGANIC_FILES,
     # SUPCRT92-era data win, to reproduce databases built from SUPCRT92 (EQ3/6 data0.com)
     "supcrt92": DEFAULT_FILES + SUPCRT92_FILES + SLOP98_FILES,
+    # Protolith's shared core: the "current" data, then the minerals of the Holland & Powell dataset and the
+    # aqueous species fitted to them (Miron et al. 2016, 2017) in place of OBIGT's (thermo/hp_minerals.py)
+    "hp": SLOP98_FILES + SUPCRT92_FILES + DEFAULT_FILES + BERMAN_FILES + ORGANIC_FILES,
 }
 
 
@@ -421,7 +433,19 @@ def load_eos_database(obigt_dir: str | Path, preset: str = "current",
     or 3.0 (neutrals).
     """
     data = load_obigt(obigt_dir, PRESETS[preset])
-    db = build_eos_database(data, masters=masters, title=f"OBIGT/HKF ({preset})")
+    overlay = hp_minerals.apply(data) if preset == "hp" else None
+    title = ("Holland & Powell minerals, Miron aqueous species, OBIGT for the rest" if overlay
+             else f"OBIGT/HKF ({preset})")
+    db = build_eos_database(data, masters=masters, title=title)
+    if overlay is not None:
+        db.data_notes.append(
+            f"{len(overlay.minerals) + len(overlay.added_minerals)} minerals come from the Holland & Powell "
+            f"dataset (Protolith's shared core) and {len(overlay.aqueous) + len(overlay.added_aqueous)} "
+            "aqueous species from Miron et al. (2016, 2017), fitted to those minerals; the other species are "
+            "OBIGT's, moved onto that scale through their basis species so their own log K are kept"
+            + "".join(f"; OBIGT's {el} species also by {d / 1000:+.2f} kJ per {el}, the bridge fitted on the HP "
+                      f"{el} minerals" for el, d in overlay.bridge.items()) + ".")
+        db.hp_overlay = overlay
     if "Berman" in data.missing:
         db.data_notes.append(
             "The Berman mineral data are missing from the data folder, so the older Helgeson "

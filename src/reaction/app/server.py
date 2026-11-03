@@ -148,6 +148,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
         if path == "/api/card":
             return self._json({"problems": s.edit_card(dict(body.get("changes", {})))})
+        if path == "/api/database":
+            name = str(body.get("name", ""))
+            if not s.engine.set_database(name):
+                return self._json({"problems": [f"could not switch to {name!r}: unknown, or a run is going"]})
+            s._publish()
+            return self._json({"problems": []})
         if path == "/api/sample":
             return self._json(load_sample(s, body.get("sample"), body.get("grams", 1000.0), body.get("take", "rock")))
         if path == "/api/reset":
@@ -183,7 +189,8 @@ def load_sample(session: Session, sample, grams=1000.0, take="rock") -> dict:
     from protolith.sample import Sample, SampleError
     try:
         smp = Sample.from_dict(sample)
-        card = card_for(smp, float(grams), str(take))
+        database = getattr(getattr(session, "engine", None), "database", "current")
+        card = card_for(smp, float(grams), str(take), database=database)
     except (SampleError, ValueError, TypeError) as exc:
         return {"problems": [str(exc)], "notes": []}
     problems = session.edit_card({"reactants": card.reactants})

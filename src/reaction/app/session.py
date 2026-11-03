@@ -10,7 +10,7 @@ import traceback
 from pathlib import Path
 
 from .assistant import Interpretation, Ollama, change_bits, interpret
-from . import analysis, carryover, diagrams, rocks
+from . import analysis, carryover, config, diagrams, rocks
 from .engine import Engine, EngineUnavailable
 from .fluids import CUSTOM, CUSTOM_LABEL, PRESETS
 from .narrate import end_lists, story
@@ -151,7 +151,9 @@ class Session:
                     "view": self.view, "windows": {"2": self.window("2")}, "diagram": self.diagram, "llm": {"model": getattr(self.model, "model", None),
                                                "ready": self._llm_ok},
                     "engine": self.engine.status() if self.engine._db is not None else
-                    {"ready": None, "message": "Thermodynamic data load on the first run."}}
+                    {"ready": None, "message": "Thermodynamic data load on the first run."},
+                    "database": {"name": getattr(self.engine, "database", "current"),
+                                 "choices": [{"key": k, "label": v} for k, v in config.DATABASES.items()]}}
 
     def card_problems(self) -> list[str]:
         """The card's own checks, plus reactant names once the database is loaded to check them."""

@@ -12,6 +12,10 @@ grams of oxide and a sentence for the card.  Titanium goes on as rutile, ilmenit
 which Reaction can react now that dissolved Ti is defined from rutile solubility
 (``reaction/thermo/titanium.py``).
 
+On Reaction's Holland & Powell data (``database="hp"``, Protolith's shared core) more of a rock goes on as
+minerals: the ulvospinel and hercynite of a spinel, the geikielite and pyrophanite of an ilmenite, and
+manganese as tephroite and spessartine.
+
 Mineral formulas are the ideal end-member formulas; ``tests/protolith/test_reaction_link.py`` checks each
 against Reaction's own database when that data is installed.
 """
@@ -75,6 +79,17 @@ RECIPES = {
     "andalusite": ("andalusite",), "corundum": ("corundum",), "nepheline": ("nepheline", "kalsilite"),
     "apatite": ("hydroxyapatite",), "rutile": ("rutile",), "sphene": ("sphene",), "titanite": ("sphene",),
 }
+# minerals Reaction has only on the Holland & Powell data (reaction/thermo/hp_minerals.py, HP_ONLY)
+HP_FORMULAS = {"ulvospinel": "Fe2TiO4", "hercynite": "FeAl2O4", "geikielite": "MgTiO3",
+               "pyrophanite": "MnTiO3", "tephroite": "Mn2SiO4", "spessartine": "Mn3Al2Si3O12"}
+FORMULAS.update(HP_FORMULAS)
+_SPL_HP = ("spinel", "hercynite", "magnetite", "ulvospinel", "chromite", "hematite")
+HP_RECIPES = {
+    "olivine": ("forsterite", "fayalite", "monticellite", "tephroite"),
+    "spinel": _SPL_HP, "titanomagnetite": _SPL_HP,
+    "rhombohedral": ("ilmenite", "geikielite", "pyrophanite", "hematite", "magnetite", "rutile"),
+    "garnet": ("pyrope", "almandine", "grossular", "andradite", "spessartine", "rutile"),
+}
 # phases Reaction has only as a polymorph: carried as that mineral, and the card says so
 STAND_INS = {"tridymite": "quartz", "cristobalite": "quartz", "stishovite": "quartz"}
 
@@ -111,7 +126,12 @@ class Recast:
     notes: list[str] = field(default_factory=list)
 
 
-def recast_phase(p: Phase) -> tuple[dict[str, float], dict[str, float], str]:
+def recipes(database: str = "current") -> dict[str, tuple[str, ...]]:
+    """Sample phase -> the Reaction minerals it is recast onto, for Reaction's ``database``."""
+    return {**RECIPES, **HP_RECIPES} if database == "hp" else RECIPES
+
+
+def recast_phase(p: Phase, database: str = "current") -> tuple[dict[str, float], dict[str, float], str]:
     """(grams of each Reaction mineral, grams of each oxide not carried, note) for one phase."""
     name = p.name.lower()
     note = ""
@@ -120,7 +140,7 @@ def recast_phase(p: Phase) -> tuple[dict[str, float], dict[str, float], str]:
         note = f"{p.name} goes on the card as {m}, the same composition (Reaction has no {p.name})"
         minerals = (m,)
     else:
-        minerals = RECIPES.get(name, ())
+        minerals = recipes(database).get(name, ())
     have = cation_moles(p.wt_pct, p.grams)
     if not minerals:
         left = {ox: p.grams * v / sum(p.wt_pct.values()) for ox, v in p.wt_pct.items()}
@@ -152,7 +172,7 @@ def recast_phase(p: Phase) -> tuple[dict[str, float], dict[str, float], str]:
     return grams, left, note
 
 
-def to_reactants(sample: Sample, scale_to: float | None = None) -> Recast:
+def to_reactants(sample: Sample, scale_to: float | None = None, database: str = "current") -> Recast:
     """The sample's solids as Reaction reactants (grams), merged across phases.
 
     ``scale_to`` grams: rescale so the solids total that much (a water/rock ratio set on the card)."""
@@ -160,7 +180,7 @@ def to_reactants(sample: Sample, scale_to: float | None = None) -> Recast:
     total: dict[str, float] = {}
     f = scale_to / sample.solid_grams if scale_to and sample.solid_grams > 0 else 1.0
     for p in sample.phases:
-        grams, left, note = recast_phase(replace(p, grams=p.grams * f))
+        grams, left, note = recast_phase(replace(p, grams=p.grams * f), database)
         out.by_phase[p.name] = grams
         if left:
             out.left_over[p.name] = left
@@ -204,7 +224,7 @@ def _t(sample: Sample) -> str:
     return f"{sample.conditions['t_c']:.0f} °C"
 
 
-def card_for(sample: Sample, grams: float = 1000.0, take: str = "rock") -> Recast:
+def card_for(sample: Sample, grams: float = 1000.0, take: str = "rock", database: str = "current") -> Recast:
     """Reactants for Reaction's card from a sample: ``take`` "rock" (the solids, as minerals), "melt" (the
     melt, quenched to glass) or "both"; ``grams`` is the total put on the card.
 
@@ -221,7 +241,7 @@ def card_for(sample: Sample, grams: float = 1000.0, take: str = "rock") -> Recas
     f = grams / (melt_g + solid_g)
     out = Recast()
     if solid_g > 0:
-        out = to_reactants(sample, scale_to=solid_g * f)
+        out = to_reactants(sample, scale_to=solid_g * f, database=database)
         out.notes = [n for n in out.notes if "of melt" not in n]
     rest: dict[str, float] = {}
     for left in out.left_over.values():
