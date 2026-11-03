@@ -1,6 +1,6 @@
 # Protolith
 
-Three apps, each its own exe: **Magma** (melting and crystallization) and **Kafka** (metamorphism:
+Three apps, each its own exe: **Magma** (melting and crystallization) and **Protolith** (metamorphism:
 stable assemblages and pseudosections) on the Holland & Powell data, and **Reaction** (water and rock,
 hot and cold) on OBIGT only. No Holland & Powell data reaches Reaction. Each module stands alone; a **sample**
 (a rock and/or fluid at a stated T and P) carries the result of one module into the next.

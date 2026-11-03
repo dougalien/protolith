@@ -1,5 +1,5 @@
 # PyInstaller recipe for Magma.exe: one file holding Python, numpy, scipy, the app, its data tables and the
-# Holland & Powell core it computes with.  No Reaction, no Kafka.
+# Holland & Powell core it computes with.  No Reaction, no Protolith.
 # Build from the Protolith folder with packaging\magma\build_exe.ps1.
 from pathlib import Path
 

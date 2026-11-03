@@ -1,5 +1,5 @@
 # PyInstaller recipe for Reaction.exe: one file holding Python, numpy, scipy, the app and its data tables.
-# OBIGT only: the Holland & Powell core, Magma and Kafka are left out.  The OBIGT databases are not inside;
+# OBIGT only: the Holland & Powell core, Magma and Protolith are left out.  The OBIGT databases are not inside;
 # they stay in %LOCALAPPDATA%\Reaction\external (scripts\fetch_references.ps1), as before.
 # Build from the Protolith folder with packaging\reaction\build_exe.ps1.
 from pathlib import Path

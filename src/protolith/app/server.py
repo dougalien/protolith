@@ -92,7 +92,7 @@ class Shell:
              "control": f"{_url(self.reaction)}/control", "results": f"{_url(self.reaction)}/results",
              "note": "" if has_data else ("Reaction's thermodynamic data is not installed yet; its window "
                                           "says how to get it.")},
-            {"key": "metamorphism", "name": "Kafka", "ready": True, "version": metamorphism_version,
+            {"key": "metamorphism", "name": "Protolith", "ready": True, "version": metamorphism_version,
              "about": "A rock at a new temperature and pressure: its stable minerals at one point or over a "
                       "pseudosection, on the same Holland and Powell data as Magma.",
              "control": f"{_url(self.metamorphism)}/control", "results": f"{_url(self.metamorphism)}/results"},

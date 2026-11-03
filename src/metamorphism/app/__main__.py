@@ -1,4 +1,4 @@
-"""``python -m metamorphism.app`` (or Kafka.exe) starts Kafka, the Metamorphism module's local server on its own and opens the control window.
+"""``python -m metamorphism.app`` (or Protolith.exe) starts Protolith, the Metamorphism module's local server on its own and opens the control window.
 Inside Protolith (``python -m protolith.app``) the shell starts it with the other modules."""
 from __future__ import annotations
 
@@ -32,18 +32,18 @@ def _no_quick_edit() -> None:
 
 def main() -> None:
     multiprocessing.freeze_support()          # a frozen exe: a spawned worker runs its row, not the app
-    ap = argparse.ArgumentParser(description="Kafka: a rock at a new temperature and pressure, by Dougalien Systems")
+    ap = argparse.ArgumentParser(description="Protolith: a rock at a new temperature and pressure, by Dougalien Systems")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--no-browser", action="store_true", help="do not open the windows")
     args = ap.parse_args()
-    if sys.platform == "win32":               # the console window says Kafka, not the path of the exe
+    if sys.platform == "win32":               # the console window says Protolith, not the path of the exe
         import ctypes
-        ctypes.windll.kernel32.SetConsoleTitleW("Kafka, by Dougalien Systems")
+        ctypes.windll.kernel32.SetConsoleTitleW("Protolith, by Dougalien Systems")
         _no_quick_edit()                       # a click in the console must not freeze the app
     httpd = make_server(args.port)
     url = f"http://127.0.0.1:{httpd.server_address[1]}"
-    print("Kafka, by Dougalien Systems (dougalien.com)")
-    print(f"Kafka is running at {url}/control  (results window: {url}/results)")
+    print("Protolith, by Dougalien Systems (dougalien.com)")
+    print(f"Protolith is running at {url}/control  (results window: {url}/results)")
     print("Press Ctrl+C to stop.")
     if not args.no_browser:
         threading.Timer(0.5, lambda: webbrowser.open(f"{url}/control")).start()

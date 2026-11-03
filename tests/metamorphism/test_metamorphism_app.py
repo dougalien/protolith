@@ -48,19 +48,19 @@ def test_pages_and_their_files(server):
     for path in ("/control", "/results"):
         status, body, _ = call(server, path)
         page = body.decode()
-        assert status == 200 and "<h1>Kafka</h1>" in page and "/static/kafka_mark.svg" in page
+        assert status == 200 and "<h1>Protolith</h1>" in page and "/static/protolith_mark.svg" in page
         for ref in ("/static/app.css", "/static/meta.css", "/static/common.js"):
             assert ref in page and call(server, ref)[0] == 200
     assert call(server, "/static/control.js")[0] == call(server, "/static/results.js")[0] == 200
     status, ico, _ = call(server, "/favicon.ico")
-    assert status == 200 and ico[:4] == b"\x00\x00\x01\x00"     # the K as a Windows .ico
+    assert status == 200 and ico[:4] == b"\x00\x00\x01\x00"     # the P as a Windows .ico
     info = json.loads(call(server, "/api/presets")[1])
     assert "pelite" in info["presets"] and "aluminous pelite" in info["presets"]
-    assert {c["kind"] for c in info["cards"]} == {"grid", "point"}
+    assert {c["kind"] for c in info["cards"]} == {"path", "grid", "point"}
     for c in info["cards"]:                     # every card's run passes the server's own checks
         assert c["rock"] in info["presets"]
         parse_inputs({"bulk": info["presets"][c["rock"]]["wt"], "system": c["system"], "water": c["water"],
-                      "kind": c["kind"], "t": c["t"], "p": c["p"]})
+                      "kind": c["kind"], "t": c.get("t"), "p": c.get("p"), "path": c.get("path"), "n": c.get("n")})
 
 
 def test_refuses_other_hosts_and_origins(server):

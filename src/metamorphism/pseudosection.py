@@ -144,8 +144,14 @@ def axis(start: float, stop: float, step: float) -> list:
 def solve_row(bulk: Bulk, t_c: list, p_kbar: float, phases=None) -> tuple:
     """One row: every temperature at one pressure, each starting from the one before.
     Returns ([Point or None], [(j, message)])."""
+    return solve_points(bulk, [(t, p_kbar) for t in t_c], phases)
+
+
+def solve_points(bulk: Bulk, tp: list, phases=None) -> tuple:
+    """Each (t_c, p_kbar) in turn, each starting from the one before (a row, or a stretch of a P-T path).
+    Returns ([Point or None], [(j, message)])."""
     out, failed, prev = [], [], None
-    for j, t in enumerate(t_c):
+    for j, (t, p_kbar) in enumerate(tp):
         try:
             pt = equilibrium(bulk, t, p_kbar, previous=prev, phases=phases)
         except (RuntimeError, ValueError, np.linalg.LinAlgError) as e:

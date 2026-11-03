@@ -1,4 +1,4 @@
-"""A small local web server for Kafka, the Metamorphism module's two windows (control, results).
+"""A small local web server for Protolith, the Metamorphism module's two windows (control, results).
 
 Standard library only, like Magma's and Reaction's.  Both windows follow one shared state through a
 server-sent-event stream.  The server listens on the loopback address only and rejects requests whose
@@ -11,6 +11,7 @@ at once, so the results window draws the diagram as it fills in, and Stop ends t
 from __future__ import annotations
 
 import json
+import math
 import mimetypes
 import os
 import threading
@@ -25,7 +26,8 @@ import numpy as np
 
 from .. import __version__
 from .. import bulk as bulk_mod
-from .. import names, pseudosection
+from .. import facies, names, pseudosection
+from .. import path as path_mod
 from ..point import Point, components_present, equilibrium
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -47,6 +49,24 @@ SYSTEM_LABEL = {"metapelite": "Metapelite (White et al. 2014)", "igneous": "Igne
 
 # Starting cards: each fills in a rock and a run that shows it well.
 CARDS = [
+    {"key": "barrovian-path", "title": "Barrovian pelite", "group": "path",
+     "blurb": "A mudstone heated and buried on a clockwise path, greenschist to upper amphibolite: chlorite gives "
+              "way to garnet, staurolite and then kyanite or sillimanite.",
+     "rock": "pelite", "system": "metapelite", "water": "excess", "kind": "path",
+     "path": [[450, 4], [600, 7.5], [700, 8]], "n": 16},
+    {"key": "buchan-path", "title": "Low-pressure (Buchan) pelite", "group": "path",
+     "blurb": "The same rock heated at shallow depth, as near an intrusion: andalusite, then sillimanite as muscovite "
+              "breaks down, then the first melt with cordierite.",
+     "rock": "pelite", "system": "metapelite", "water": "excess", "kind": "path",
+     "path": [[450, 2.5], [700, 3.5]], "n": 16},
+    {"key": "staurolite-path", "title": "Aluminous pelite", "group": "path",
+     "blurb": "An Al-rich mudstone up a medium-pressure path: chloritoid, then garnet and staurolite, then biotite.",
+     "rock": "aluminous pelite", "system": "metapelite", "water": "excess", "kind": "path",
+     "path": [[450, 5], [650, 9]], "n": 16},
+    {"key": "metabasite-path", "title": "Metabasite", "group": "path",
+     "blurb": "A basalt from greenschist into amphibolite on the igneous set: amphibole and plagioclase take over.",
+     "rock": "metabasite", "system": "igneous", "water": "excess", "kind": "path",
+     "path": [[500, 4], [750, 8]], "n": 12},
     {"key": "barrovian", "title": "Barrovian pelite", "group": "grid",
      "blurb": "A mudstone through the greenschist and amphibolite facies: chlorite gives way to garnet, "
               "biotite and the aluminosilicates.",
@@ -80,6 +100,8 @@ NOTES = [
     "they are stepped; a finer grid moves them closer to the true reaction lines.",
     "Fields are shaded by variance, F = C - phases + 2: the darker the field, the more degrees of freedom.",
     "Modes are wt% of the rock without its free fluid. With water in excess, the amount of fluid means nothing.",
+    "A P-T path solves points spaced evenly along its line. The facies fields behind it are schematic, after "
+    "Spear (1993) and Winter (2010); the Al2SiO5 and muscovite + quartz lines are worked out from ds6.2.",
     "Oxides the phase set cannot use (Cr2O3 for metapelites, MnO for the igneous set, and P2O5, CO2, NiO) "
     "are left out and listed.",
 ]
@@ -113,8 +135,25 @@ def parse_inputs(d: dict) -> tuple[bulk_mod.Bulk, dict]:
         if not 0 < p <= 60:
             raise ValueError("pressure must be above 0 and at most 60 kbar")
         return b, {"kind": "point", "t": t, "p": p}
+    if kind == "path":
+        way = d.get("path")
+        if not isinstance(way, list) or len(way) < 2:
+            raise ValueError("give the path as at least two temperature, pressure pairs")
+        try:
+            way = [(_num(a, "temperature"), _num(b, "pressure")) for a, b in way]
+        except (TypeError, ValueError):
+            raise ValueError("give each point of the path as a temperature and a pressure") from None
+        for t, p in way:
+            if not 100 <= t <= 1500:
+                raise ValueError("temperatures must be between 100 and 1500 °C")
+            if not 0 < p <= 60:
+                raise ValueError("pressures must be above 0 and at most 60 kbar")
+        n = int(_num(d.get("n", 16), "number of steps"))
+        if not 2 <= n <= 60:
+            raise ValueError("a path has 2 to 60 steps")
+        return b, {"kind": "path", "path": [list(q) for q in way], "n": n, "tp": path_mod.points(way, n)}
     if kind != "grid":
-        raise ValueError("kind must be point or grid")
+        raise ValueError("kind must be point, path or grid")
     try:
         ts = pseudosection.axis(*[_num(v, "temperature") for v in d.get("t", [])])
         ps = pseudosection.axis(*[_num(v, "pressure") for v in d.get("p", [])])
@@ -163,6 +202,22 @@ def grid_json(ps: pseudosection.Pseudosection, done: list) -> dict:
             "failed": [[i, j, m] for i, j, m in ps.failed], "done": done}
 
 
+def path_json(tp: list, pts: list, done: list, c: int) -> dict:
+    """The path for the windows: every point's T, P and (once solved) its minerals' modes."""
+    rows = []
+    for (t, p), pt, ok in zip(tp, pts, done):
+        if not ok:
+            rows.append({"t_c": t, "p_kbar": p, "state": "running"})
+        elif pt is None:
+            rows.append({"t_c": t, "p_kbar": p, "state": "failed"})
+        else:
+            rows.append({"t_c": t, "p_kbar": p, "state": "done", "label": pt.label, "assemblage": list(pt.assemblage),
+                         "variance": c - len(pt.assemblage) + 2,
+                         "modes": {m.abbr: round(m.mode, 2) for m in pt.minerals}})
+    minerals = sorted({a for r in rows for a in r.get("modes", {})}, key=lambda a: names.ORDER.get(a, 99))
+    return {"points": rows, "minerals": minerals, "done": done}
+
+
 def _partial_boundaries(ps, done):
     """Boundaries while rows are missing: only the edges between two finished cells."""
     te, pe = pseudosection._edges(np.asarray(ps.t_c, float)), pseudosection._edges(np.asarray(ps.p_kbar, float))
@@ -199,6 +254,8 @@ class State:
         self.ps: pseudosection.Pseudosection | None = None   # a pseudosection, filled row by row
         self.done: list = []
         self.grid: dict | None = None
+        self.path_pts: list = []                             # a P-T path's points, filled stretch by stretch
+        self.path: dict | None = None
         self.source_sample = None        # the sample the rock came from, the parent of samples written here
         # Inside Protolith: a function(sample dict, take, grams) that puts a sample on Reaction's card
         # and returns {"problems", "notes", "open"}.  None when Metamorphism runs on its own.
@@ -216,7 +273,7 @@ class State:
                                                 "water": b.water, "system": b.system,
                                                 "system_label": SYSTEM_LABEL[b.system], "components": c},
                 "point": None if self.point is None else point_json(self.point, c),
-                "grid": self.grid, "notes": NOTES, "app_version": __version__,
+                "grid": self.grid, "path": self.path, "notes": NOTES, "app_version": __version__,
                 "source": None if self.source_sample is None else _sample_summary(self.source_sample),
                 "can_send": self.send_sample is not None}
 
@@ -236,11 +293,19 @@ class State:
         self.run_id += 1
         self.inputs, self.run, self.bulk = dict(inputs), run, b
         self.point, self.ps, self.grid, self.done = None, None, None, []
+        self.path_pts, self.path = [], None
         self.status, self.message = "running", ""
         self.started, self.elapsed = time.time(), 0.0
         if run["kind"] == "point":
             self.workers, self.progress = 1, [0, 1]
             target = self._run_point
+        elif run["kind"] == "path":
+            n = len(run["tp"])
+            self.workers = workers_for(math.ceil(n / 2))
+            self.progress = [0, n]
+            self.path_pts, self.done = [None] * n, [False] * n
+            self.path = path_json(run["tp"], self.path_pts, self.done, components_present(b))
+            target = self._run_path
         else:
             self.workers = workers_for(len(run["p"]))
             self.progress = [0, len(run["p"])]
@@ -293,10 +358,32 @@ class State:
             self.grid = grid_json(res, self.done)
         self._finish("done")
 
+    def _run_path(self, b, run) -> None:
+        c = components_present(b)
+
+        def on_result(start, pts, fails):
+            with self.lock:
+                for k, pt in enumerate(pts):
+                    self.path_pts[start + k] = pt
+                    self.done[start + k] = True
+                self.path = path_json(run["tp"], self.path_pts, self.done, c)
+                self.progress = [sum(self.done), len(self.done)]
+            self.changed()
+
+        try:
+            path_mod.compute(b, run["tp"], workers=self.workers, on_result=on_result, stop=self._stop)
+        except pseudosection.Stopped:
+            return self._finish("stopped", f"Stopped with {sum(self.done)} of {len(self.done)} points done.")
+        except Exception as exc:          # noqa: BLE001
+            return self._finish("error", f"{type(exc).__name__}: {exc}")
+        self._finish("done")
+
     # ---- points, samples, files -------------------------------------------------------------------
     def point_at(self, i: int, j: int) -> Point | None:
         if self.run.get("kind") == "point":
             return self.point
+        if self.run.get("kind") == "path":
+            return self.path_pts[j] if 0 <= j < len(self.path_pts) else None
         if self.ps is None or not (0 <= i < len(self.ps.p_kbar) and 0 <= j < len(self.ps.t_c)):
             return None
         return self.ps.points[i][j]
@@ -338,6 +425,7 @@ class State:
         ps = pseudosection.Pseudosection.from_dict(d)
         self.run_id += 1
         self.bulk, self.ps, self.point = ps.bulk, ps, None
+        self.path_pts, self.path = [], None
         self.done = [True] * len(ps.p_kbar)
         self.grid = grid_json(ps, self.done)
         self.run = {"kind": "grid", "t": ps.t_c, "p": ps.p_kbar}
@@ -356,7 +444,7 @@ def _sample_summary(s) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Kafka"
+    server_version = "Protolith"
     protocol_version = "HTTP/1.1"
 
     @property
@@ -415,7 +503,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/static/"):
             return self._file(STATIC / path[len("/static/"):])
         if path == "/favicon.ico":
-            return self._file(STATIC / "kafka.ico")
+            return self._file(STATIC / "protolith.ico")
         if path == "/api/state":
             return self._json(self.state.snapshot())
         if path == "/api/presets":
@@ -425,6 +513,8 @@ class Handler(BaseHTTPRequestHandler):
                                "systems": SYSTEM_LABEL, "left_out": bulk_mod.LEFT_OUT, "cards": CARDS,
                                "cpus": workers_for(10_000), "seconds_per_point": SECONDS_PER_POINT,
                                "max_points": MAX_POINTS})
+        if path == "/api/facies":
+            return self._json(facies.diagram())
         if path == "/events":
             return self._events()
         try:
