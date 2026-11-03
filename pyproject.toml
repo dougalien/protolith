@@ -17,6 +17,7 @@ magma = "magma.app.__main__:main"
 reaction-app = "reaction.app.__main__:main"
 protolith = "protolith.app.__main__:main"
 metamorphism = "metamorphism.__main__:main"
+kafka = "metamorphism.app.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,4 +1,4 @@
-"""A small local web server for Metamorphism's two windows (control, results).
+"""A small local web server for Kafka, the Metamorphism module's two windows (control, results).
 
 Standard library only, like Magma's and Reaction's.  Both windows follow one shared state through a
 server-sent-event stream.  The server listens on the loopback address only and rejects requests whose
@@ -356,7 +356,7 @@ def _sample_summary(s) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Metamorphism"
+    server_version = "Kafka"
     protocol_version = "HTTP/1.1"
 
     @property
@@ -415,7 +415,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/static/"):
             return self._file(STATIC / path[len("/static/"):])
         if path == "/favicon.ico":
-            return self._file(STATIC / "metamorphism_mark.svg")
+            return self._file(STATIC / "kafka.ico")
         if path == "/api/state":
             return self._json(self.state.snapshot())
         if path == "/api/presets":
