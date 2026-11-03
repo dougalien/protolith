@@ -1,0 +1,302 @@
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+let snap = null, waiting = false, chatCount = 0;
+
+let fluidKeys = "";
+let startKeys = "", rockKeys = "";
+let exampleKeys = "", exampleHidden = null;
+
+function pill(el, text, kind) { el.textContent = text; el.className = "pill " + (kind || ""); }
+
+function render(s) {
+  snap = s;
+  const c = s.card;
+  setIfIdle($("f-title"), c.title);
+  renderStarts(s);
+  renderRocks(s);
+  renderFluid(s);
+  $("f-activity_model").value = c.activity_model;
+  $("f-gas_phase").value = c.gas_phase === false ? "false" : "true";
+  $("f-solid_solutions").value = c.solid_solutions ? "true" : "false";
+  $("f-clay_edges").value = c.clay_edges === false ? "false" : "true";
+  $("f-follow_phase").value = c.follow_phase || "whole";
+  $("f-isotopes").value = c.isotopes ? "true" : "false";
+  $("f-methane_sulfate").value = c.methane_sulfate || "apart";
+  $("f-redox_apart").value = c.redox_apart ? "true" : "false";
+  $("f-minerals_form").value = c.minerals_form === false ? "false" : "true";
+  $("f-energy").value = c.energy ? "true" : "false";
+  $("f-mix_spacing").value = c.mix_spacing || "ratio";
+  $("f-kinetics").value = c.kinetics ? "true" : "false";
+  $("f-duration_unit").value = c.duration_unit || "years";
+  for (const k of ["duration", "surface_area_cm2_per_g", "evaporate", "uncertainty_runs", "exchange_meq", "hfo_g",
+    "kaolinite_g", "illite_g", "montmorillonite_g", "kd_solid_g", "kd_medium"]) setIfIdle($("f-" + k), c[k]);
+  document.querySelectorAll(".kin").forEach((el) => { el.style.display = c.kinetics ? "" : "none"; });
+  $("reactant-hint").textContent = c.kinetics
+    ? "(what is there at the start, per kg of water; minerals without a measured rate are added steadily)"
+    : "(added steadily, all of it by the last step, per kg of water)";
+  for (const k of ["p_start_bar", "p_end_bar", "t_start_c", "t_end_c", "steps"]) setIfIdle($("f-" + k), c[k]);
+  document.querySelectorAll("#modeseg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === c.mode));
+  const col = c.kind === "transport";
+  document.querySelectorAll("#kindseg button").forEach((b) => b.classList.toggle("on", b.dataset.kind === (c.kind || "path")));
+  document.querySelectorAll(".path-only").forEach((el) => { el.style.display = col ? "none" : ""; });
+  document.querySelectorAll(".col-only").forEach((el) => { el.style.display = col ? "" : "none"; });
+  document.querySelectorAll(".tp-label").forEach((el) => { el.textContent = col ? el.dataset.col : el.dataset.path; });
+  $("path-label").textContent = col ? "Column: from the inlet to the outlet" : "Path: a straight line from start to end";
+  $("fluid-label").textContent = col ? "Fluid flowing in" : "Fluid";
+  $("mix-hint").style.display = col ? "none" : "";
+  for (const k of ["cells", "pore_volumes", "column_m", "dispersivity_m"]) setIfIdle($("f-" + k), c[k]);
+  if (col) $("reactant-hint").textContent = c.kinetics
+    ? "(in every cell, per kg of pore water; minerals with a measured rate react at it as the fluid flows, the others are brought to equilibrium before the flow)"
+    : "(in every cell, per kg of pore water, brought to equilibrium with the pore fluid before the flow)";
+  $("duration-label").firstChild.textContent = col ? "Flow lasts" : "Run for";
+
+  const reactants = $("reactants");
+  reactants.replaceChildren(...c.reactants.map((r, i) => h("span", { class: "chip on static" },
+    (r.unit === "g" && r.amount > 0 && r.amount < 1e-3 ? `${+(r.amount * 1e6).toPrecision(6)} µg` : `${r.amount} ${r.unit}`) + ` ${r.name}`,
+    h("button", { class: "ghost", style: "padding:0 4px", title: "Remove " + r.name, "aria-label": "Remove " + r.name,
+      onclick: () => edit("reactants", c.reactants.filter((_, k) => k !== i)) }, "×"))));
+  if (!c.reactants.length) reactants.replaceChildren(h("span", { class: "hint" }, "none: only temperature and pressure change"));
+
+  const blocked = $("blocked");
+  blocked.replaceChildren(...c.blocked_minerals.map((m) => h("span", { class: "chip on static" }, m,
+    h("button", { class: "ghost", style: "padding:0 4px", title: "Allow " + m, "aria-label": "Allow " + m,
+      onclick: () => api("/api/card", { changes: { blocked_minerals: c.blocked_minerals.filter((x) => x !== m) } }) }, "×"))));
+  if (!c.blocked_minerals.length) blocked.replaceChildren(h("span", { class: "hint" }, "none: every mineral in the database may form"));
+
+  $("problems").replaceChildren(...s.card_problems.map((p) => h("div", { class: "errbox", style: "margin-bottom:4px" }, p)));
+  $("advice").replaceChildren(...(s.advisories || []).map((p) => h("div", { class: "warnbox", style: "margin-bottom:4px" }, p)));
+
+  const running = s.run.state === "running";
+  $("run").disabled = running;
+  $("run").textContent = running ? "Running…" : "Run";
+  $("prog").style.display = running ? "block" : "none";
+  $("prog").value = s.run.progress;
+  $("runmsg").textContent = running ? s.run.message : "";
+  const err = $("runerr");
+  err.style.display = s.run.state === "error" ? "block" : "none";
+  err.textContent = s.run.error;
+
+  const chat = $("chat");
+  const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
+  if (s.chat.length !== chatCount) waiting = waiting && s.chat[s.chat.length - 1].role === "user";
+  chatCount = s.chat.length;
+  const bubbles = s.chat.map((m) => h("div", { class: "bub " + m.role }, m.text));
+  if (waiting) bubbles.push(h("div", { class: "bub assistant thinking" }, "Thinking…"));
+  chat.replaceChildren(...bubbles);
+  if (atBottom || waiting) chat.scrollTop = chat.scrollHeight;
+
+  $("hist").replaceChildren(...s.runs.map((r) => h("button", {
+    class: r.id === s.current ? "on" : "", onclick: () => api("/api/current", { id: r.id }),
+    title: r.summary }, r.title ? h("b", {}, r.title + ": ") : null, r.summary, " ",
+    h("span", { class: "hint" }, "· " + r.created.replace("T", " ").slice(0, 16)))));
+  if (!s.runs.length) $("hist").replaceChildren(h("div", { class: "hint" }, "No runs yet."));
+
+  pill($("pill-llm"), s.llm.ready ? `${s.llm.model} ready` : `${s.llm.model || "language model"} offline: simple rules only`,
+    s.llm.ready ? "ok" : "warn");
+  const e = s.engine;
+  pill($("pill-engine"), e.ready === false ? "data missing" : e.ready ? "data loaded" : "data loads on first run",
+    e.ready === false ? "bad" : e.ready ? "ok" : "");
+  $("pill-engine").title = e.message;
+  renderExample(s);
+}
+
+function renderFluid(s) {
+  const c = s.card, read = s.fluid_read || { lines: [] }, fluids = s.fluids || [];
+  const keys = fluids.map((f) => f.key).join();
+  if (keys !== fluidKeys) {
+    fluidKeys = keys;
+    $("f-fluid").replaceChildren(...fluids.map((f) => h("option", { value: f.key }, f.label)));
+    $("f-mix_with").replaceChildren(h("option", { value: "" }, "None"),
+      ...fluids.filter((f) => f.key !== "custom").map((f) => h("option", { value: f.key }, f.label)));
+  }
+  $("f-mix_with").value = c.mix_with;
+  if ($("f-pore_fluid").options.length !== fluids.length) {
+    $("f-pore_fluid").replaceChildren(h("option", { value: "" }, "The same fluid"),
+      ...fluids.filter((f) => f.key !== "custom").map((f) => h("option", { value: f.key }, f.label)));
+  }
+  $("f-pore_fluid").value = c.pore_fluid || "";
+  for (const k of ["mix_ratio", "mix_t_c"]) {
+    $("f-" + k).disabled = !c.mix_with;
+    setIfIdle($("f-" + k), c[k] === null ? "" : c[k]);
+  }
+  $("mix-hint").textContent = !c.mix_with ? "" : c.mix_t_c === null
+    ? "Mixed in steadily; the temperature follows the path above."
+    : "Mixed in steadily; the temperature follows the mixing (mass-weighted, equal heat capacities), so the end temperature above is not used.";
+  $("f-t_end_c").disabled = c.mix_with && c.mix_t_c !== null;
+  $("f-fluid").value = c.fluid;
+  const custom = c.fluid === "custom";
+  const f = fluids.find((x) => x.key === c.fluid);
+  $("fluid-desc").textContent = custom ? "" :
+    (f ? f.description + " Editing it below starts a custom fluid from it." : "");
+  $("custom").style.display = "block";
+  {
+    setIfIdle($("f-analysis"), read.analysis);
+    $("f-units").value = read.units;
+    setIfIdle($("f-ph"), read.ph === null ? "" : read.ph);
+    setIfIdle($("f-fluid_t_c"), read.measured_t_c);
+    setIfIdle($("f-fluid_p_bar"), read.measured_p_bar ?? "");
+    const ions = read.lines.filter((l) => l.charge !== 0).map((l) => l.species);
+    const opts = [["auto", "Auto"], ["none", "None (use as given)"], ...ions.map((i) => [i, "On " + i])];
+    if (!opts.some(([v]) => v === read.charge_balance)) opts.push([read.charge_balance, "On " + read.charge_balance]);
+    $("f-charge_balance").replaceChildren(...opts.map(([v, l]) => h("option", { value: v }, l)));
+    $("f-charge_balance").value = read.charge_balance;
+    const label = { "O2": "Dissolved O2", "H2": "Dissolved H2", "Fe+3": "Fe(III) / Fe(II)", "H2S": "Sulfide / sulfate", "NO3-": "Nitrate / ammonia" };
+    const ropts = [["auto", "Auto (from the analysis)"], ["none", "Not tracked"], ["air", "Air (O2 0.21 bar)"],
+      ["log_fo2", "log fO2"], ["eh", "Eh (V)"], ["pe", "pe"],
+      ...read.redox_species.map((s) => [s, label[s] || s])];
+    if (!ropts.some(([v]) => v === read.redox)) ropts.push([read.redox, label[read.redox] || read.redox]);
+    $("f-redox").replaceChildren(...ropts.map(([v, l]) => h("option", { value: v }, l)));
+    $("f-redox").value = read.redox;
+    const needsValue = ["log_fo2", "eh", "pe"].includes(read.redox);
+    $("redox-value-box").style.display = needsValue ? "" : "none";
+    if (needsValue) setIfIdle($("f-redox_value"), read.redox_value === null ? "" : read.redox_value);
+  }
+  const n = read.lines.length;
+  $("fluid-sum").textContent = n ? `As read: ${n} solute${n > 1 ? "s" : ""}, pH ${read.ph ?? "not given"} at ${read.measured_t_c} °C${read.measured_p_bar ? " and " + read.measured_p_bar + " bar" : ""}, ` +
+    `${fmtVal(read.tds_mg_per_kg)} mg/kg dissolved solids` : "Nothing read yet";
+  const rows = read.lines.map((l) => h("tr", {}, h("td", {}, l.written), h("td", {}, `${l.value} ${l.unit}`),
+    h("td", { class: "muted" }, l.molal === null ? "" : fmtVal(l.molal) + " mol/kg water")));
+  $("fluid-table").replaceChildren(h("table", { class: "small", style: "margin-top:4px;border-spacing:10px 1px" }, ...rows),
+    ...read.notes.map((t) => h("div", { class: "hint" }, t)));
+}
+
+connect(render, (up) => pill($("pill-link"), up ? "connected" : "reconnecting", up ? "ok" : "bad"));
+
+$("compose").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const text = $("msg").value.trim();
+  if (!text) return;
+  $("msg").value = "";
+  waiting = true;
+  render({ ...snap, chat: [...snap.chat, { role: "user", text, t: "" }] });
+  api("/api/chat", { text });
+});
+$("msg").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); $("compose").requestSubmit(); }
+});
+
+function edit(field, value) { api("/api/card", { changes: { [field]: value } }); }
+for (const k of ["title", "p_start_bar", "p_end_bar", "t_start_c", "t_end_c", "steps"]) {
+  $("f-" + k).addEventListener("change", (ev) => edit(k, ev.target.value));
+}
+$("f-fluid").addEventListener("change", (ev) => edit("fluid", ev.target.value));
+for (const k of ["analysis", "units", "ph", "fluid_t_c", "fluid_p_bar", "charge_balance", "redox", "redox_value", "mix_with", "mix_ratio", "mix_t_c"]) {
+  $("f-" + k).addEventListener("change", (ev) => edit(k, ev.target.value));
+}
+$("f-activity_model").addEventListener("change", (ev) => edit("activity_model", ev.target.value));
+$("f-gas_phase").addEventListener("change", (ev) => edit("gas_phase", ev.target.value === "true"));
+$("f-solid_solutions").addEventListener("change", (ev) => edit("solid_solutions", ev.target.value === "true"));
+$("f-clay_edges").addEventListener("change", (ev) => edit("clay_edges", ev.target.value === "true"));
+$("f-follow_phase").addEventListener("change", (ev) => edit("follow_phase", ev.target.value));
+$("f-isotopes").addEventListener("change", (ev) => edit("isotopes", ev.target.value === "true"));
+$("f-methane_sulfate").addEventListener("change", (ev) => edit("methane_sulfate", ev.target.value));
+for (const k of ["redox_apart", "minerals_form", "energy"]) $("f-" + k).addEventListener("change", (ev) => edit(k, ev.target.value === "true"));
+$("f-mix_spacing").addEventListener("change", (ev) => edit("mix_spacing", ev.target.value));
+$("f-kinetics").addEventListener("change", (ev) => edit("kinetics", ev.target.value === "true"));
+for (const k of ["duration", "duration_unit", "surface_area_cm2_per_g", "evaporate", "uncertainty_runs", "exchange_meq", "hfo_g",
+  "kaolinite_g", "illite_g", "montmorillonite_g", "kd_solid_g", "kd_medium"]) {
+  $("f-" + k).addEventListener("change", (ev) => edit(k, ev.target.value));
+}
+document.querySelectorAll("#modeseg button").forEach((b) => b.addEventListener("click", () => edit("mode", b.dataset.mode)));
+document.querySelectorAll("#kindseg button").forEach((b) => b.addEventListener("click", () => edit("kind", b.dataset.kind)));
+for (const k of ["cells", "pore_volumes", "column_m", "dispersivity_m", "pore_fluid"]) {
+  $("f-" + k).addEventListener("change", (ev) => edit(k, ev.target.value));
+}
+$("add-blocked").addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  const v = ev.target.value.trim().toLowerCase();
+  if (v && snap && !snap.card.blocked_minerals.includes(v)) edit("blocked_minerals", [...snap.card.blocked_minerals, v]);
+  ev.target.value = "";
+});
+$("add-reactant").addEventListener("keydown", async (ev) => {
+  if (ev.key !== "Enter") return;
+  const v = ev.target.value.trim();
+  if (!v || !snap) return;
+  const reply = await api("/api/card", { changes: { reactants: [...snap.card.reactants.map((r) => `${r.amount} ${r.unit} ${r.name}`), v].join("; ") } });
+  if (!(reply.problems || []).length) ev.target.value = "";
+  else $("add-reactant").setCustomValidity(reply.problems.join("; ")), $("add-reactant").reportValidity();
+});
+$("add-reactant").addEventListener("input", (ev) => ev.target.setCustomValidity(""));
+$("run").addEventListener("click", () => api("/api/run"));
+$("reset").addEventListener("click", () => api("/api/reset"));
+$("clear-chat").addEventListener("click", () => {
+  if (confirm("Clear the chat? The scenario card and earlier runs stay.")) api("/api/clear-chat");
+});
+
+function renderStarts(s) {
+  const cards = s.starting_cards || [], keys = cards.map((c) => c.key).join();
+  if (keys === startKeys) return;
+  startKeys = keys;
+  $("starts").replaceChildren($("starts").firstElementChild, ...cards.map((c) => {
+    const b = h("button", { type: "button", title: c.description }, c.label);
+    b.addEventListener("click", () => api("/api/reset", { start: c.key }));
+    return b;
+  }));
+}
+// Rock cards: a button puts that rock on the card as the only reactant, at the grams in the box.
+function renderRocks(s) {
+  const cards = s.rock_cards || [], keys = cards.map((c) => c.key).join();
+  if (keys !== rockKeys) {
+    rockKeys = keys;
+    const head = [...$("rocks").children].slice(0, 2);
+    $("rocks").replaceChildren(...head, ...cards.map((c) =>
+      h("button", { type: "button", "data-key": c.key, title: c.description, onclick: () => {
+        const g = parseFloat($("rock-g").value);
+        if (!(g > 0)) { $("rock-g").reportValidity(); return; }
+        api("/api/card", { changes: { reactants: `${g} g ${c.label}` } });
+      } }, c.label)));
+  }
+  const running = s.run.state === "running";
+  document.querySelectorAll("#rocks button").forEach((b) => { b.disabled = running; });
+}
+// Examples: one button fills the card with a worked example; the user presses Run.  The box under the buttons says what the example
+// shows and how the card sets it up, and the fields named there are outlined on the card.
+const EXAMPLE_TARGETS = { reactants: "reactants", blocked_minerals: "blocked", kind: "kindseg", mode: "modeseg" };
+
+function exampleTarget(field) {
+  const el = $(EXAMPLE_TARGETS[field] || "f-" + field);
+  return el && (el.closest("label.f") || el);
+}
+
+function renderExample(s) {
+  const list = s.examples || [], keys = list.map((x) => x.key).join();
+  if (keys !== exampleKeys) {
+    exampleKeys = keys;
+    $("examples").replaceChildren($("examples").firstElementChild, ...list.map((x) =>
+      h("button", { type: "button", "data-key": x.key, title: x.feature + ": " + x.description,
+        onclick: () => { exampleHidden = null; api("/api/example", { key: x.key }); } }, x.label)));
+  }
+  const ex = list.find((x) => x.key === s.example);
+  const running = s.run.state === "running";
+  document.querySelectorAll("#examples button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.key === s.example);
+    b.disabled = running;
+  });
+  document.querySelectorAll(".ex-hl").forEach((el) => el.classList.remove("ex-hl"));
+  const box = $("example-box");
+  if (!ex || exampleHidden === ex.key) { box.hidden = true; return; }
+  box.hidden = false;
+  box.replaceChildren(
+    h("div", { class: "row", style: "justify-content:space-between;align-items:baseline" },
+      h("div", {}, h("b", {}, "Example: " + ex.label), h("span", { class: "muted" }, " · shows " + ex.feature.toLowerCase())),
+      h("button", { class: "ghost", title: "Hide this note and the outlines; the card stays as it is",
+        "aria-label": "Hide the example note", onclick: () => { exampleHidden = ex.key; render(snap); } }, "×")),
+    h("p", {}, ex.description),
+    h("div", { class: "small muted" }, "How the card sets it up (outlined below; click a line to go to it):"),
+    h("ul", {}, ...ex.setup.map(([field, text]) => h("li", {},
+      h("a", { href: "#", onclick: (ev) => {
+        ev.preventDefault();
+        const el = exampleTarget(field);
+        if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.classList.add("ex-flash"); setTimeout(() => el.classList.remove("ex-flash"), 1200); }
+      } }, text)))),
+    h("div", { class: "hint" }, "Press Run to see it. Change anything on the card first to see what difference it makes."));
+  for (const [field] of ex.setup) {
+    const el = exampleTarget(field);
+    if (el) el.classList.add("ex-hl");
+  }
+}
+
+$("open-results").addEventListener("click", () => {
+  window.open("/results", "reaction-results", "popup=no");
+});

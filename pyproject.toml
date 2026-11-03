@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "protolith"
+version = "0.0.1"
+description = "Open geochemical calculator: melting and crystallization, metamorphism, and water-rock reaction on shared thermodynamic data"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "matplotlib>=3.6", "pandas>=2.0"]
+
+[project.scripts]
+magma = "magma.app.__main__:main"
+reaction-app = "reaction.app.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"magma.data" = ["*.tsv"]
+"magma.app" = ["static/*"]
+"reaction.app" = ["static/*"]
+"reaction" = ["data/*.tsv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

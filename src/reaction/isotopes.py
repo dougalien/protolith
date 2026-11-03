@@ -1,0 +1,525 @@
+"""Stable isotopes (δ18O, δD, δ13C, δ34S) and 87Sr/86Sr as a layer on a solved reaction path.
+
+At each point every carrier of an element (water, dissolved carbon or sulfur species, each mineral, the gas)
+is in isotopic equilibrium with the others at that temperature: δ_carrier = δ_ref + Δ_carrier(T), with
+Δ = 1000 ln α against a reference (water for O, CO2 for C, H2S for S) from ``data/isotope_fractionation.tsv``.
+The system's inventory Σ n δ is carried from point to point: reactants add their own δ, matter that leaves
+(flow-through minerals and gas, a phase that separates) takes the δ it had, and evaporation takes vapour in
+equilibrium with the water (Horita and Wesolowski 1994).  δ_ref then follows from the mass balance
+Σ n (δ_ref + Δ) = inventory.  This is the δ-notation approximation GWB and EQ6 also use.
+
+Hydrogen: the water carries nearly all of it (111 mol per kg), with the liquid-vapour fractionation of Horita
+and Wesolowski (1994).  Hydroxyl-bearing minerals take mineral-water D/H factors (``mineral_water_h``):
+measured curves for kaolinite (Sheppard and Gilg 1996), muscovite (Suzuoki and Epstein 1976) and the
+calcic amphiboles (Graham and others 1984), and otherwise Suzuoki and Epstein's (1976) general equation from
+the Al, Mg and Fe of the octahedral sites.  Minerals whose hydrogen is molecular water (zeolites, salt hydrates)
+or sits in a sulfate, carbonate or phosphate take the water's δD.  
+The gas phase: steam (H2O(g)) sits at the liquid-vapour fractionation of the water (Horita and Wesolowski 1994)
+for 18O and D/H; CO2 gas at its 18O fractionation from liquid water (Brenninkmeijer and others 1983), and its
+13C against dissolved CO2 (Mook 1986); H2 (gas and dissolved) and CH4 (gas and dissolved) at their D/H
+fractionation from water (Horibe and Craig 1995: CH4-H2 measured 200 to 500 C, H2O-H2 their fit to Bardo and
+Wolfsberg 1976, both against water vapour).  So degassing and boiling carry the light or heavy end off with
+the gas, and the δ of each gas is shown.  H2S gas and dissolved H2S take the same δ34S (they differ by about
+1 permil near 25 C and less when hot); oxygen and hydrogen in other dissolved species take the water's δ.
+
+Strontium does not fractionate: 87Sr/86Sr is a tracer carried with the fluid, mixed from the starting fluid and
+the Sr that dissolving rock (or a reactant given Sr) adds; secondary minerals are taken to keep none.
+"""
+from __future__ import annotations
+
+import csv
+import math
+from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
+
+
+DATA = Path(__file__).parent / "data" / "isotope_fractionation.tsv"
+SYSTEMS = {"O": "d18O", "C": "d13C", "S": "d34S", "H": "dD"}
+SR_GRAMS_PER_MOLE = 87.62
+STANDARDS = {"d18O": "VSMOW", "d13C": "VPDB", "d34S": "VCDT", "dD": "VSMOW"}
+
+
+@dataclass(frozen=True)
+class Factor:
+    system: str
+    phase: str
+    a: float
+    b: float
+    c: float
+    d: float
+    t_max_c: float | None
+    source: str
+
+    def delta(self, t_c: float) -> float:
+        """1000 ln α (phase − reference) at t_c."""
+        t = t_c + 273.15
+        return self.a * 1e8 / t ** 3 + self.b * 1e6 / t ** 2 + self.c * 1e3 / t + self.d
+
+
+@lru_cache(maxsize=1)
+def table() -> dict[tuple[str, str], Factor]:
+    rows = [line for line in DATA.read_text(encoding="utf-8").splitlines() if line and not line.startswith("#")]
+    out = {}
+    for r in csv.DictReader(rows, delimiter="\t"):
+        out[(r["system"], r["phase"])] = Factor(r["system"], r["phase"], float(r["a"]), float(r["b"]), float(r["c"]),
+                                                float(r["d"]), float(r["t_max_c"]) if r["t_max_c"] else None,
+                                                r["source"])
+    return out
+
+
+def liquid_vapour_o(t_c: float) -> float:
+    """1000 ln α (liquid water − vapour) for 18O, Horita and Wesolowski (1994), 0 at and above 374 °C."""
+    if t_c >= 374.0:
+        return 0.0
+    t = t_c + 273.15
+    return max(-7.685 + 6.7123e3 / t - 1.6664e6 / t ** 2 + 0.35041e9 / t ** 3, 0.0)
+
+
+def liquid_vapour_h(t_c: float) -> float:
+    """1000 ln α (liquid water − vapour) for D/H, Horita and Wesolowski (1994): 76 ‰ at 25 °C, 28 ‰ at 100 °C,
+    changing sign near 220 °C (the vapour is then the heavier), 0 at and above 374 °C."""
+    if t_c >= 374.0:
+        return 0.0
+    t = t_c + 273.15
+    return 1158.8e-9 * t ** 3 - 1620.1e-6 * t ** 2 + 794.84e-3 * t - 161.04 + 2.9992e9 / t ** 3
+
+
+LIQUID_VAPOUR = {"O": liquid_vapour_o, "H": liquid_vapour_h}
+
+
+def _h2o_vapour_h2(t_k: float) -> float:
+    """α (water vapour − H2), Horibe and Craig (1995) after Bardo and Wolfsberg (1976)."""
+    return 1.0473 + 201036.0 / t_k ** 2 + 2.060e9 / t_k ** 4
+
+
+def h2_water_h(t_c: float) -> float:
+    """1000 ln α (H2 − liquid water) for D/H: about −720 ‰ at 25 °C, −440 ‰ at 350 °C."""
+    t = t_c + 273.15
+    return -1000.0 * math.log(_h2o_vapour_h2(t)) - liquid_vapour_h(t_c)
+
+
+def ch4_water_h(t_c: float) -> float:
+    """1000 ln α (CH4 − liquid water) for D/H, from Horibe and Craig's (1995) CH4-H2 (α = 0.8994 +
+    183540/T², 200 to 500 °C) and H2O-H2: about −140 ‰ at 350 °C."""
+    t = t_c + 273.15
+    return 1000.0 * math.log((0.8994 + 183540.0 / t ** 2) / _h2o_vapour_h2(t)) - liquid_vapour_h(t_c)
+
+
+CH4_H_RANGE = (200.0, 500.0)
+
+
+# --- mineral-water D/H ------------------------------------------------------------------------------------
+# Suzuoki and Epstein (1976), calibrated 400 to 850 C on micas and amphiboles:
+#   1000 ln α = -22.4e6/T^2 + 28.2 + (2 X_Al - 4 X_Mg - 68 X_Fe), X the share of each octahedral cation.
+# Below 400 C its 1/T^2 term runs far past every low-temperature measurement (it gives -225 permil for a clay at
+# 25 C, where smectites and kaolinite are measured near -30 to -60; Sheppard and Gilg 1996, figs. 3 and 4), so
+# below its range the equation is held at its 400 C value.
+SE_T_MIN_C = 400.0
+SE_SOURCE = "Suzuoki and Epstein (1976) general equation"
+H_NOT_OCTAHEDRAL = {        # hydrogen as molecular water in channels and cages: taken at the water's δD
+    "analcime", "laumontite", "wairakite", "heulandite", "stilbite", "mordenite", "chabazite", "natrolite",
+    "scolecite", "mesolite", "clinoptilolite", "phillipsite", "stellerite", "yugawaralite", "erionite",
+    "ferrierite", "gismondine", "thomsonite", "ice"}
+H_BONDED = {"epidote", "orthoepidote", "clinozoisite", "zoisite", "boehmite", "diaspore", "prehnite",
+            "pumpellyite", "lawsonite", "clinochlore", "daphnite", "chamosite", "sudoite", "cookeite",
+            "Fe-amesite", "Mg-amesite"}
+
+
+def _suzuoki_epstein(t_c: float, x_al: float, x_mg: float, x_fe: float) -> float:
+    t = max(t_c, SE_T_MIN_C) + 273.15
+    return -22.4e6 / t ** 2 + 28.2 + 2.0 * x_al - 4.0 * x_mg - 68.0 * x_fe
+
+
+def _kaolinite_h(t_c: float) -> float:            # Sheppard and Gilg (1996), 0 to 350 C
+    t = t_c + 273.15
+    return -2.2e6 / t ** 2 - 7.7
+
+
+def _muscovite_h(t_c: float) -> float:            # Suzuoki and Epstein (1976) eq. 1, 450 to 800 C
+    t = max(t_c, SE_T_MIN_C) + 273.15
+    return -22.1e6 / t ** 2 + 19.1
+
+
+def _tremolite_h(t_c: float) -> float:            # Graham and others (1984): flat to 650 C, then a 1/T^2 curve
+    if t_c <= 650.0:
+        return -21.7
+    t = t_c + 273.15
+    return -31.0e6 / t ** 2 + 14.9
+
+
+# name: (function of T, source, calibrated range in C)
+H_CURVES = {
+    "kaolinite": (_kaolinite_h, "Sheppard and Gilg (1996)", (0.0, 350.0)),
+    "dickite": (_kaolinite_h, "Sheppard and Gilg (1996)", (0.0, 350.0)),
+    "halloysite": (_kaolinite_h, "Sheppard and Gilg (1996), as kaolinite", (0.0, 350.0)),
+    "muscovite": (_muscovite_h, "Suzuoki and Epstein (1976)", (400.0, 850.0)),
+    "tremolite": (_tremolite_h, "Graham and others (1984)", (350.0, 950.0)),
+    "pargasite": (lambda t: -23.1, "Graham and others (1984), hornblende", (350.0, 850.0)),
+    "ferropargasite": (lambda t: -23.1, "Graham and others (1984), ferroan pargasitic hornblende", (350.0, 850.0)),
+    "hornblende": (lambda t: -23.1, "Graham and others (1984)", (350.0, 850.0)),
+    "actinolite": (lambda t: -29.0, "Graham and others (1984), at 400 C", (400.0, 400.0)),
+    "ferro-actinolite": (lambda t: -29.0, "Graham and others (1984), actinolite at 400 C", (400.0, 400.0)),
+}
+
+
+def octahedral(elements: dict[str, float]) -> tuple[float, float, float] | None:
+    """Shares of Al, Mg and Fe among a mineral's octahedral cations, or None if it has none of them.  All of
+    the Al is counted: tetrahedral Al in micas and chlorites moves the result by 2 permil at most."""
+    al, mg, fe = (elements.get(e, 0.0) for e in ("Al", "Mg", "Fe"))
+    total = al + mg + fe
+    if total <= 0:
+        return None
+    return al / total, mg / total, fe / total
+
+
+def mineral_water_h(name: str, elements: dict[str, float], t_c: float) -> tuple[float | None, str]:
+    """1000 ln α (mineral − water) for D/H and where it comes from; None for minerals that take the water's δD
+    (hydrogen as molecular water, or in a sulfate, carbonate or phosphate, or no Al, Mg or Fe)."""
+    if name in H_CURVES:
+        f, source, _ = H_CURVES[name]
+        return f(t_c), source
+    if (name in H_NOT_OCTAHEDRAL or any(elements.get(e) for e in ("S", "C", "P", "Cl", "F"))
+            or not elements.get("H")):
+        return None, ""
+    x = octahedral(elements)
+    if x is None:
+        return None, ""
+    return _suzuoki_epstein(t_c, *x), SE_SOURCE
+WATER_ATOMS = {"O": 1.0, "H": 2.0}
+
+
+# minerals of the database without a row of their own: the closest phase that has one
+_SAME = {
+    "albite,high": "albite", "albite,low": "albite", "K-feldspar,high": "K-feldspar", "K-feldspar,low": "K-feldspar",
+    "quartz,beta": "quartz", "chalcedony": "quartz", "amorphous silica": "quartz", "coesite": "quartz",
+    "cristobalite,alpha": "quartz", "cristobalite,beta": "quartz", "tridymite,high": "quartz",
+    "tridymite,low": "quartz", "antigorite": "lizardite", "clinozoisite": "zoisite", "orthoepidote": "epidote",
+    "daphnite": "chamosite", "ferro-actinolite": "actinolite", "enstatite,clino": "enstatite",
+    "enstatite,proto": "enstatite", "dickite": "kaolinite", "halloysite": "kaolinite", "celestite": "barite",
+    "gypsum": "anhydrite", "laumontite": "wairakite", "pumpellyite": "epidote", "margarite": "muscovite",
+    "fluormuscovite": "muscovite", "pargasite": "hornblende", "ferropargasite": "hornblende",
+    "anthophyllite": "actinolite", "grunerite": "actinolite", "fluortremolite": "tremolite",
+    "fluorphlogopite": "phlogopite", "chlorphlogopite": "phlogopite", "fluorannite": "annite",
+    "chlorannite": "annite", "fluortalc": "talc", "minnesotaite": "talc", "greenalite": "lizardite",
+    "sepiolite": "talc", "hydroxyapatite": "apatite", "fluorapatite": "apatite", "chlorapatite": "apatite",
+    "maghemite": "magnetite", "lepidocrocite": "goethite", "sudoite": "clinochlore", "cookeite": "clinochlore",
+    "Fe-amesite": "chamosite", "Mg-amesite": "clinochlore", "huntite": "dolomite", "wurtzite": "sphalerite",
+    "bornite": "chalcopyrite", "pseudowollastonite": "wollastonite", "meionite": "anorthite",
+}
+
+
+@dataclass
+class Carriers:
+    """Moles of one element in each carrier and its Δ against the reference, at one point."""
+    moles: dict[str, float] = field(default_factory=dict)
+    delta: dict[str, float] = field(default_factory=dict)
+
+    def add(self, name: str, moles: float, delta: float) -> None:
+        """Species grouped under one name (DIC: CO2, HCO3-, ...) take their mole-weighted Δ."""
+        if moles > 0:
+            old = self.moles.get(name, 0.0)
+            self.moles[name] = old + moles
+            self.delta[name] = (old * self.delta.get(name, 0.0) + moles * delta) / (old + moles)
+
+    @property
+    def total(self) -> float:
+        return sum(self.moles.values())
+
+
+class Fractionation:
+    """Δ of each carrier at a temperature, with the analogues used where a phase has no data of its own."""
+
+    def __init__(self, db):
+        self.db = db
+        self.analogues: dict[str, set[str]] = {}       # system -> "mineral (as analogue)"
+        self.beyond: set[str] = set()                  # factors used above their calibrated range
+        self.below: set[str] = set()                   # and below it
+        self.hydrous: set[str] = set()                 # minerals given the water's δD (no D/H factor)
+        self.h_sources: dict[str, set[str]] = {}       # D/H source -> minerals
+        self.h_bonded: set[str] = set()                # strongly H-bonded: the general equation is too heavy
+
+    def _factor(self, system: str, phase: str, t_c: float) -> float:
+        f = table()[(system, phase)]
+        if f.t_max_c is not None and t_c > f.t_max_c + 1:
+            self.beyond.add(f"{phase} ({system}, to {f.t_max_c:.0f} °C)")
+        return f.delta(t_c)
+
+    def mineral(self, system: str, name: str, t_c: float) -> float:
+        if system == "H":
+            d, source = mineral_water_h(name, self._elements(name), t_c)
+            if d is None:
+                self.hydrous.add(name)
+                return 0.0
+            self.h_sources.setdefault(source, set()).add(name)
+            if source == SE_SOURCE and name in H_BONDED:
+                self.h_bonded.add(name)
+            rng = H_CURVES[name][2] if name in H_CURVES else (SE_T_MIN_C, 850.0)
+            if t_c > rng[1] + 1:
+                self.beyond.add(f"{name} (dD, to {rng[1]:.0f} °C)")
+            elif t_c < rng[0] - 1:
+                self.below.add(f"{name} (from {rng[0]:.0f} °C)")
+            return d
+        rows = table()
+        key = {"S": self._sulfur_phase, "C": self._carbon_phase}.get(system, self._oxygen_phase)(name)
+        if key != name and not (system == "S" and key == "sulfate" and name in ("anhydrite", "barite")):
+            self.analogues.setdefault(system, set()).add(f"{name} as {key}")
+        return self._factor(system, key, t_c) if (system, key) in rows else 0.0
+
+    def gas_o(self, name: str, t_c: float) -> float | None:
+        """Δ18O of a gas (or None: it takes the water's) against liquid water."""
+        if name == "H2O(g)":
+            return -liquid_vapour_o(t_c)
+        if name == "CO2(g)":
+            return self._factor("O", "CO2(g)", t_c)
+        return None
+
+    def fluid_h(self, name: str, t_c: float) -> tuple[str, float] | None:
+        """Label and ΔD against liquid water of steam, H2 and CH4 (gas or dissolved), or None."""
+        if name == "H2O(g)":
+            return name, -liquid_vapour_h(t_c)
+        base = name[:-3] if name.endswith("(g)") else name
+        if base == "H2":
+            return name if name.endswith("(g)") else "H2", h2_water_h(t_c)
+        if base == "CH4":
+            lo, hi = CH4_H_RANGE
+            if t_c > hi + 1:
+                self.beyond.add(f"CH4 (dD, to {hi:.0f} °C)")
+            elif t_c < lo - 1:
+                self.below.add(f"CH4 (dD, from {lo:.0f} °C; extrapolated)")
+            return name if name.endswith("(g)") else "CH4", ch4_water_h(t_c)
+        return None
+
+    def _elements(self, name: str) -> dict[str, float]:
+        return self.db.species[name].elements
+
+    def _oxygen_phase(self, name: str) -> str:
+        if ("O", name) in table():
+            return name
+        if name in _SAME:
+            return _SAME[name]
+        el = self._elements(name)
+        if el.get("C"):
+            return "calcite"
+        if el.get("S"):
+            return "anhydrite"
+        if el.get("Si"):
+            return "albite"
+        return "goethite" if el.get("H") else "hematite"
+
+    def _carbon_phase(self, name: str) -> str:
+        if ("C", name) in table():
+            return name
+        if name in ("huntite", "ankerite"):
+            return "dolomite"
+        return "graphite" if self._elements(name).get("O", 0) == 0 else "calcite"
+
+    def _sulfur_phase(self, name: str) -> str:
+        if ("S", name) in table():
+            return name
+        el = self._elements(name)
+        if el.get("O", 0) >= 4 * el.get("S", 1):
+            return "sulfate"
+        return _SAME.get(name, "H2S")
+
+    def aqueous(self, system: str, name: str, el: dict[str, float], t_c: float) -> float:
+        """Δ of a dissolved species (or gas) carrying C or S."""
+        if system == "C":
+            o, h, c = el.get("O", 0.0), el.get("H", 0.0), el["C"]
+            if o >= 3 * c:
+                return self._factor("C", "HCO3-", t_c)      # bicarbonate, carbonate and their complexes
+            if o >= 2 * c:                                  # CO2: the gas is the reference
+                return 0.0 if name.endswith("(g)") else self._factor("C", "CO2(aq)", t_c)
+            if o == 0 and h == 4 * c:
+                return self._factor("C", "CH4", t_c)
+            return self._factor("C", "CO" if o >= c else "CH4", t_c)   # CO; organic species like methane
+        o, s = el.get("O", 0.0), el["S"]
+        if o >= 4 * s:
+            return self._factor("S", "sulfate", t_c)
+        if o == 0:
+            return 0.0                                      # H2S, HS-, and sulfide complexes
+        return self._factor("S", "SO2", t_c)                # sulfite, thiosulfate and other intermediates
+
+
+def element_totals(db, bulk: dict[str, float]) -> dict[str, float]:
+    """Moles of O, C and S in a system given as moles of basis components."""
+    out = {e: 0.0 for e in SYSTEMS}
+    for comp, moles in bulk.items():
+        sp = db.species.get(comp)
+        if sp is None:
+            continue
+        for e in SYSTEMS:
+            out[e] += moles * sp.elements.get(e, 0.0)
+    return out
+
+
+def carriers(db, state, t_c: float, frac: Fractionation) -> dict[str, Carriers]:
+    """The carriers of O, H, C and S in an equilibrium state.  Oxygen and hydrogen not in a mineral or a gas of
+    their own (steam, CO2 gas, H2, CH4) are in the water; C and S in species without a class of their own go to
+    the reference."""
+    totals = element_totals(db, state.bulk)
+    out = {e: Carriers() for e in SYSTEMS}
+    solids = dict(state.minerals)
+    for members in state.solid_solutions.values():
+        for m, n in members.items():
+            solids[m] = solids.get(m, 0.0) + n
+    for name, n in solids.items():
+        el = db.species[name].elements
+        for e in SYSTEMS:
+            if el.get(e):
+                out[e].add(name, n * el[e], frac.mineral(e, name, t_c))
+    kg = state.water_kg
+    fluid = list((name, st.molality * kg) for name, st in state.speciation.species.items()) + list(state.gas.items())
+    for name, n in fluid:
+        sp = db.species.get(name)
+        if sp is None or n <= 0:
+            continue
+        for e in ("C", "S"):
+            if sp.elements.get(e):
+                out[e].add(_fluid_label(e, name, sp.elements), n * sp.elements[e],
+                           frac.aqueous(e, name, sp.elements, t_c))
+        if n < 1e-12:                         # traces: no carrier (nor range notes) of their own
+            continue
+        if sp.elements.get("O") and name.endswith("(g)"):
+            d = frac.gas_o(name, t_c)
+            if d is not None:
+                out["O"].add(name, n * sp.elements["O"], d)
+        if sp.elements.get("H"):
+            h = frac.fluid_h(name, t_c)
+            if h is not None:
+                out["H"].add(h[0], n * sp.elements["H"], h[1])
+    for e in ("O", "H"):
+        out[e].add("water", totals[e] - out[e].total, 0.0)
+    for e in ("C", "S"):
+        rest = totals[e] - out[e].total
+        if rest > 1e-12 * max(totals[e], 1e-300):
+            out[e].add("CO2" if e == "C" else "H2S", rest, 0.0)
+    return out
+
+
+def _fluid_label(e: str, name: str, el: dict[str, float]) -> str:
+    """Dissolved carbon and sulfur grouped into DIC, methane and organics, sulfate and sulfide."""
+    if name.endswith("(g)"):
+        return name
+    if e == "C":
+        o, c = el.get("O", 0.0), el["C"]
+        return "DIC" if o >= 2 * c else "CH4" if name.startswith("CH4") else "organic C"
+    o, s = el.get("O", 0.0), el["S"]
+    return "sulfate" if o >= 4 * s else "sulfide" if o == 0 else "other S"
+
+
+@dataclass
+class Source:
+    """The isotopic make-up of something added to the system: δ per system and its Sr."""
+    deltas: dict[str, float]                 # d18O, d13C, d34S
+    sr_moles_per_unit: float = 0.0           # mol Sr per unit of the reactant (or per kg of the fluid)
+    sr_ratio: float | None = None            # 87Sr/86Sr
+
+
+# carriers whose fractionation is too large for δ_ref + Δ (H2 is 700 permil lighter than water at 25 C):
+# for them δ = (1000 + δ_ref) α − 1000
+EXACT = {"H2", "H2(g)", "CH4", "CH4(g)"}
+
+
+def _linear(name: str, delta: float) -> tuple[float, float]:
+    """δ of a carrier as a δ_ref + b."""
+    if name in EXACT:
+        g = math.exp(delta / 1000.0)
+        return g, 1000.0 * (g - 1.0)
+    return 1.0, delta
+
+
+class Tracker:
+    """Carries the isotope inventory along a path of equilibrium states (see the module text)."""
+
+    def __init__(self, db, fluid: Source, bulk0: dict[str, float]):
+        self.db = db
+        self.frac = Fractionation(db)
+        self.inventory: dict[str, float] = {}
+        self.totals = element_totals(db, bulk0)
+        for e, key in SYSTEMS.items():
+            self.inventory[e] = self.totals[e] * fluid.deltas.get(key, 0.0)
+        self.prev: dict[str, Carriers] | None = None
+        self.prev_deltas: dict[str, dict[str, float]] = {}
+        self.sr = fluid.sr_moles_per_unit            # the fluid starts as 1 kg of water
+        self.sr_inv = self.sr * (fluid.sr_ratio or 0.0)
+        self.sr_ratio = fluid.sr_ratio
+        self._cl = None
+        # this step's evaporation, per system: moles of the element, Σ m δ_start, Σ m Δ(l-v)
+        self._vapour = {e: (0.0, 0.0, 0.0) for e in LIQUID_VAPOUR}
+
+    def add(self, comp_moles: dict[str, float], source: Source, units: float) -> None:
+        """``units`` of a reactant whose components per unit are ``comp_moles`` join the system."""
+        for e in SYSTEMS:
+            n = units * sum(m * self.db.species[c].elements.get(e, 0.0) for c, m in comp_moles.items()
+                            if c in self.db.species)
+            self.totals[e] += n
+            self.inventory[e] += n * source.deltas.get(SYSTEMS[e], 0.0)
+        sr = units * source.sr_moles_per_unit
+        if sr > 0 and source.sr_ratio is not None:
+            self.sr += sr
+            self.sr_inv += sr * source.sr_ratio
+
+    def evaporate(self, water_moles: float, t_c: float) -> None:
+        """Water vapour in equilibrium with the water leaves.  The vapour's δ18O and δD are the mean of the
+        water's at the start and at the end of the step (settled in ``point``), so coarse steps follow Rayleigh
+        closely."""
+        for e, lv_of in LIQUID_VAPOUR.items():
+            n = water_moles * WATER_ATOMS[e]
+            d_water = self.prev_deltas.get(e, {}).get("water")
+            if d_water is None:
+                d_water = self.inventory[e] / self.totals[e] if self.totals[e] else 0.0
+            self.totals[e] -= n
+            m, start, lv = self._vapour[e]
+            self._vapour[e] = (m + n, start + n * d_water, lv + n * lv_of(t_c))
+
+    def point(self, state, t_c: float, chloride: float) -> dict[str, dict[str, float]]:
+        """δ of every carrier at this point, after matter that left since the last one is taken out."""
+        now = carriers(self.db, state, t_c, self.frac)
+        totals = element_totals(self.db, state.bulk)
+        for e in SYSTEMS:
+            gone = self.totals[e] - totals[e]
+            if gone > 1e-9 * max(self.totals[e], 1e-300):
+                self.inventory[e] -= gone * self._leaving_delta(e, now[e])
+            elif gone < 0:                                   # gained without a reactant (rounding)
+                mean = self.inventory[e] / self.totals[e] if self.totals[e] else 0.0
+                self.inventory[e] -= gone * mean
+            self.totals[e] = totals[e]
+        if self._cl is not None and self._cl > 0 and chloride < self._cl:   # salt (and Sr) left with a phase
+            self.sr_inv *= chloride / self._cl
+            self.sr *= chloride / self._cl
+        self._cl = chloride
+        out: dict[str, dict[str, float]] = {}
+        for e, c in now.items():
+            total = c.total
+            if total <= 0:
+                out[e] = {}
+                continue
+            inv, weight = self.inventory[e], total
+            m, start, lv = self._vapour.get(e, (0.0, 0.0, 0.0))
+            if m > 0:                                 # vapour at the mean of the water's δ before and after
+                inv -= 0.5 * start - lv
+                weight += 0.5 * m
+            lin = {k: _linear(k, c.delta[k]) for k in c.moles}      # δ_k = a ref + b
+            weight += sum(n * (lin[k][0] - 1.0) for k, n in c.moles.items())
+            ref = (inv - sum(n * lin[k][1] for k, n in c.moles.items())) / weight
+            if m > 0:
+                self.inventory[e] = inv - 0.5 * m * (ref + c.delta.get("water", 0.0))
+            out[e] = {k: lin[k][0] * ref + lin[k][1] for k in c.moles}
+        self.prev, self.prev_deltas = now, out
+        self._vapour = {e: (0.0, 0.0, 0.0) for e in LIQUID_VAPOUR}
+        return out
+
+    @property
+    def sr_fluid_ratio(self) -> float | None:
+        return self.sr_inv / self.sr if self.sr > 0 else None
+
+    def _leaving_delta(self, e: str, now: Carriers) -> float:
+        """δ of what left between the last point and this one: the carriers that shrank, as they were."""
+        if self.prev is None:
+            return self.inventory[e] / self.totals[e] if self.totals[e] else 0.0
+        shrank = {k: n - now.moles.get(k, 0.0) for k, n in self.prev[e].moles.items() if n > now.moles.get(k, 0.0)}
+        weight = sum(shrank.values())
+        if weight <= 0:
+            return self.inventory[e] / self.totals[e] if self.totals[e] else 0.0
+        return sum(w * self.prev_deltas[e][k] for k, w in shrank.items()) / weight
