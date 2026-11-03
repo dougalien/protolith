@@ -20,9 +20,14 @@ def test_wt_pct_round_trip_keeps_ferric_iron():
 
 
 def test_left_out_oxides_are_listed():
-    b = bulk.from_wt_pct({**bulk.PRESETS["pelite"], "MnO": 0.2, "P2O5": 0.15})
-    assert set(b.left_out) == {"MnO", "P2O5"}
+    wt = {**bulk.PRESETS["pelite"], "MnO": 0.2, "P2O5": 0.15, "Cr2O3": 0.05}
+    b = bulk.from_wt_pct(wt)                                     # metapelite set: MnO in, no Cr2O3
+    assert set(b.left_out) == {"P2O5", "Cr2O3"}
+    assert b.moles[I["MnO"]] > 0 and b.moles[I["Cr2O3"]] == 0
     assert b.grams == pytest.approx(100.0 - sum(b.left_out.values()), rel=1e-6)
+    ig = bulk.from_wt_pct(wt, system="igneous")
+    assert set(ig.left_out) == {"P2O5", "MnO"}
+    assert ig.moles[I["MnO"]] == 0 and ig.moles[I["Cr2O3"]] > 0
 
 
 def test_bad_compositions_are_refused():
@@ -49,4 +54,7 @@ def test_names_follow_composition():
     assert names.abbreviation("cpx", {"jd": 0.5, "di": 0.5}, c) == "Omp"
     assert names.abbreviation("st", {"fst": 1.0}, c) == "St"
     assert names.abbreviation("ctd", {"fctd": 1.0}, c) == "Cld"
+    assert names.abbreviation("ma", {"ma": 0.7, "mut": 0.3}, c) == "Mrg"
+    assert names.abbreviation("ilmm", {"oilm": 0.9, "dhem": 0.1}, c) == "Ilm"
+    assert names.abbreviation("H2O", {"H2O": 1.0}, c) == "H2O"
     assert names.label(("Qz", "Grt", "H2O", "Amp", "Amp")) == "Grt 2Amp Qz H2O"

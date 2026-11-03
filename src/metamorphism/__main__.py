@@ -4,7 +4,7 @@
     python -m metamorphism point --sample basalt.sample --part rock --water excess --t 550 --p 8 --save out.sample
     python -m metamorphism grid --rock metabasite --t 450 750 25 --p 2 12 1 --out mb.pseudosection
 
-A rock is a preset (``--rock``: pelite or metabasite), a sample file (``--sample``, with ``--part``), or
+A rock is a preset (``--rock``: pelite, metabasite or "world median pelite"), a sample file (``--sample``, with ``--part``), or
 oxide wt% (``--wt "SiO2=50 Al2O3=15 ..."``).
 """
 from __future__ import annotations
@@ -23,14 +23,14 @@ def _rock(a) -> bulk_mod.Bulk:
         from protolith.metamorphism_link import bulk_from_sample
         from protolith.sample import Sample
 
-        return bulk_from_sample(Sample.load(a.sample), a.part, a.water)
+        return bulk_from_sample(Sample.load(a.sample), a.part, a.water, a.set)
     if a.wt:
         wt = {}
         for item in a.wt.replace(",", " ").split():
             ox, v = item.split("=")
             wt[ox.strip()] = float(v)
-        return bulk_mod.from_wt_pct(wt, a.water, "typed")
-    return bulk_mod.from_wt_pct(bulk_mod.PRESETS[a.rock], a.water, a.rock)
+        return bulk_mod.from_wt_pct(wt, a.water, "typed", a.set)
+    return bulk_mod.from_wt_pct(bulk_mod.PRESETS[a.rock], a.water, a.rock, a.set)
 
 
 def _print_point(pt) -> None:
@@ -54,6 +54,8 @@ def main(argv=None) -> int:
         s.add_argument("--part", choices=("whole", "rock", "melt"), default="whole")
         s.add_argument("--wt")
         s.add_argument("--water", choices=bulk_mod.WATER_MODES, default="excess")
+        s.add_argument("--set", choices=bulk_mod.SYSTEMS, default="metapelite",
+                       help="phase set: metapelite (White et al. 2014, with MnO) or igneous")
     pt = sub.choices["point"]
     pt.add_argument("--t", type=float, required=True, help="degC")
     pt.add_argument("--p", type=float, required=True, help="kbar")

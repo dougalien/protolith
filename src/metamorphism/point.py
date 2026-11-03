@@ -14,13 +14,12 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
-from protolith.core.hp.minimize import COMPONENTS, SOLUTION_PHASES, Result, equilibrate
+from protolith.core.hp.minimize import COMPONENTS, PHASE_SETS, Result, equilibrate
 
 from . import names
 from .bulk import Bulk, grams, solver_moles, to_wt_pct
 
-# the core's igneous set plus the Al-rich minerals of the metapelite set (staurolite, chloritoid, sapphirine)
-PHASES = SOLUTION_PHASES + ("st", "ctd", "sa")
+FLUIDS = ("fl", "H2O")      # the igneous set's fluid model, the metapelite set's pure water
 TRACE_WT = 0.01        # wt% of the rock; a phase below this is listed as a trace and left out of the label
 
 
@@ -102,13 +101,13 @@ def _mineral(ph) -> Mineral:
 def wrap(r: Result, water: str) -> Point:
     """The solver's Result as a Point."""
     rows = [_mineral(ph) for ph in r.phases]
-    fluid_rows = [m for m in rows if m.hp == "fl"]
-    rock = [m for m in rows if m.hp != "fl"]
+    fluid_rows = [m for m in rows if m.hp in FLUIDS]
+    rock = [m for m in rows if m.hp not in FLUIDS]
     fluid = None
     if fluid_rows:
         om = np.sum([np.array(m.oxide_moles) for m in fluid_rows], axis=0)
-        fluid = Mineral("H2O", "water", "fl", grams(om), 0.0, to_wt_pct(om), fluid_rows[0].end_members, "",
-                        {}, [float(v) for v in om])
+        fluid = Mineral("H2O", "water", fluid_rows[0].hp, grams(om), 0.0, to_wt_pct(om),
+                        fluid_rows[0].end_members, "", {}, [float(v) for v in om])
     total = sum(m.grams for m in rock)
     for m in rock:
         m.mode = 100.0 * m.grams / total if total > 0 else 0.0
@@ -124,18 +123,21 @@ def equilibrium(bulk: Bulk, t_c: float, p_kbar: float, previous: Point | None = 
     """The stable assemblage of `bulk` at t_c (degC) and p_kbar.
 
     previous: the answer at a nearby point; its assemblage is tried first (much faster along a path).
-    phases: the core's solution phases to allow (default PHASES; pure phases are always on).  With water in excess, a point that
+    phases: the core's solution phases to allow (default: all of the bulk's phase set; pure phases are always
+    on).  The phase set is the bulk's (``Bulk.system``).  With water in excess, a point that
     comes out without a fluid is solved again with three times the water."""
     if p_kbar <= 0:
         raise ValueError("pressure must be above zero")
     if t_c + 273.15 < 300:
         raise ValueError("temperature must be above 27 C")
     raw_prev = previous.raw if previous is not None else None
-    phases = PHASES if phases is None else tuple(phases)
-    r = equilibrate(solver_moles(bulk), t_c + 273.15, p_kbar, phases=phases, previous=raw_prev, seed=seed)
+    system = PHASE_SETS[bulk.system]
+    phases = None if phases is None else tuple(phases)
+    r = equilibrate(solver_moles(bulk), t_c + 273.15, p_kbar, phases=phases, previous=raw_prev, seed=seed,
+                    system=system)
     pt = wrap(r, bulk.water)
     if bulk.water == "excess" and pt.fluid is None:
-        r = equilibrate(solver_moles(bulk, 3.0), t_c + 273.15, p_kbar, phases=phases, seed=seed)
+        r = equilibrate(solver_moles(bulk, 3.0), t_c + 273.15, p_kbar, phases=phases, seed=seed, system=system)
         pt = wrap(r, bulk.water)
     return pt
 

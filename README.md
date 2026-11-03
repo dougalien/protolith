@@ -28,8 +28,8 @@ Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.
 ## The shared core
 
 `protolith.core.hp` is the Holland & Powell system every module computes with: the ds6.36 end members
-(`endmembers`), the igneous solution models including melt and fluid, with staurolite, chloritoid and
-sapphirine from the metapelite set (`solutions`), and the Gibbs energy
+(`endmembers`, ds6.36 and ds6.2), the igneous solution models including melt and fluid (`solutions`), the
+metapelite set of White et al. (2014) (`solutions_mp`), and the Gibbs energy
 minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Magma, which now runs its
 HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
 modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
@@ -41,8 +41,9 @@ every remaining OBIGT species' own log K. OBIGT stays the default until the diff
 [docs/reaction/HP_COMPARISON.md](docs/reaction/HP_COMPARISON.md) (from `scripts/compare_databases.py`) lists
 every change.
 
-Metamorphism runs the same minimizer at one T and P or over a T-P grid (a pseudosection), with
-staurolite, chloritoid and sapphirine from the metapelite set of White et al. (2014) added to the core.
+Metamorphism runs the same minimizer at one T and P or over a T-P grid (a pseudosection). By default it
+uses the full metapelite set of White et al. (2014) on ds6.2, with MnO (`solutions_mp`, ported from
+MAGEMin and checked against MAGEMin's own results). The igneous set is the other choice.
 Its rock can come from a `.sample` file (the whole sample, the rock or the melt), and any point can be
 saved as one. It has no window yet. From the command line:
 

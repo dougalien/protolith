@@ -59,7 +59,7 @@ def to_components(bulk: Composition) -> np.ndarray:
     n = bulk.normalized().moles()
     out = np.zeros(len(COMPONENTS))
     for c in COMPONENTS:
-        if c in ("FeO", "O"):
+        if c in ("FeO", "O", "MnO"):          # (the igneous set has no Mn end members: MnO stays out)
             continue
         out[_I[c]] = n.get(c, 0.0)
     out[_I["FeO"]] = n.get("FeO", 0.0) + 2.0 * n.get("Fe2O3", 0.0)

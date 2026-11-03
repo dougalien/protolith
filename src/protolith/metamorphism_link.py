@@ -13,16 +13,19 @@ from metamorphism.point import Point
 
 from .sample import Phase, Sample, mix, rock_only
 
-DATASET = ("Holland and Powell (2011) dataset ds636; solution models of Holland, Green and Powell (2018), "
-           "with staurolite, chloritoid and sapphirine of White et al. (2014)")
+DATASETS = {
+    "metapelite": "Holland and Powell (2011) dataset ds62; metapelite solution models of White et al. (2014)",
+    "igneous": "Holland and Powell (2011) dataset ds636; solution models of Holland, Green and Powell (2018)",
+}
 PARTS = ("whole", "rock", "melt")
 
 
-def bulk_from_sample(s: Sample, part: str = "whole", water: str = "bulk") -> Bulk:
+def bulk_from_sample(s: Sample, part: str = "whole", water: str = "bulk", system: str = "metapelite") -> Bulk:
     """The bulk composition to metamorphose, from a sample.
 
     part: "whole" (melt, solids and fluid together), "rock" (without the melt) or "melt" (the melt only).
-    water: "bulk" keeps the sample's own water, "excess" keeps a free fluid at every point."""
+    water: "bulk" keeps the sample's own water, "excess" keeps a free fluid at every point.
+    system: the phase set, "metapelite" (White et al. 2014, with MnO) or "igneous"."""
     if part not in PARTS:
         raise ValueError(f"part must be one of {', '.join(PARTS)}")
     if part == "melt":
@@ -36,7 +39,7 @@ def bulk_from_sample(s: Sample, part: str = "whole", water: str = "bulk") -> Bul
     else:
         wt = s.bulk_wt_pct
     name = s.note or (s.written_by or {}).get("app", "sample")
-    return from_wt_pct(wt, water=water, name=f"{name} ({part})")
+    return from_wt_pct(wt, water=water, name=f"{name} ({part})", system=system)
 
 
 def _phase(m) -> Phase:
@@ -70,7 +73,8 @@ def to_sample(pt: Point, bulk: Bulk, *, parent: str | None = None, note: str = "
         conditions={"t_c": float(pt.t_c), "p_bar": float(pt.p_kbar) * 1000.0, "fo2": None, "log_fo2": None},
         bulk_wt_pct=mix(parts), total_grams=float(sum(g for g, _ in parts)), phases=phases, melt=melt,
         fluid=fluid,
-        provenance={"engine": "hp", "dataset": DATASET,
-                    "run": {"module": "metamorphism", "water": bulk.water, **(run or {})}},
+        provenance={"engine": "hp", "dataset": DATASETS[bulk.system],
+                    "run": {"module": "metamorphism", "water": bulk.water, "phase_set": bulk.system,
+                            **(run or {})}},
         note="; ".join(notes), written_by={"app": "Metamorphism", "version": metamorphism_version},
         parent=parent)

@@ -1,4 +1,5 @@
-"""End-member Gibbs energies in the Holland & Powell (2011) dataset (data/hp_ds636.tsv).
+"""End-member Gibbs energies in the Holland & Powell (2011) dataset: ds6.36 (data/hp_ds636.tsv, the default,
+used by the igneous set) and ds6.2 (data/hp_ds62.tsv, used by the metapelite set of White et al. 2014).
 
 Units follow the dataset: kJ, kbar, K.  `gibbs_j` gives J/mol at T in K and P in bar for use beside the
 MELTS engine.  G is the apparent Gibbs energy of formation from the elements (H at 298.15 K, 1 bar, minus T S):
@@ -71,6 +72,7 @@ def _load(file: str = "hp_ds636.tsv") -> dict[str, EndMember]:
 
 
 DATA = _load()
+DATASETS = {"636": DATA, "62": _load("hp_ds62.tsv")}
 _AQUEOUS = {"H+", "Cl-", "OH-", "Na+", "K+", "Ca++", "Mg++", "Fe++", "Al+++", "CO3--", "AlOH3", "AlOH4-", "KOH",
             "HCl", "KCl", "NaCl", "CaCl2", "CaCl+", "MgCl2", "MgCl+", "FeCl2", "aqSi", "HS-", "HSO3-", "SO42-",
             "HSO4-"}
@@ -209,13 +211,13 @@ def _bragg_williams(e: EndMember, t: float, p: float, state: str) -> float:
 
 # ---- G ---------------------------------------------------------------------------------------------------
 @lru_cache(maxsize=65536)
-def gibbs(name: str, t: float, p: float, state: str = "equilibrium") -> float:
-    """G of an end member, kJ/mol, at T (K) and P (kbar)."""
+def gibbs(name: str, t: float, p: float, state: str = "equilibrium", dataset: str = "636") -> float:
+    """G of an end member, kJ/mol, at T (K) and P (kbar), from the dataset named ("636" or "62")."""
     if name in _AQUEOUS:
         raise ValueError(f"{name} is an aqueous species (DEW model), not part of this engine")
     if name in _NO_EOS:
         raise ValueError(f"{name} has no equation of state in this engine")
-    e = DATA[name]
+    e = DATASETS[dataset][name]
     g = e.h - t * e.s + _cp_terms(e.cp, t)
 
     if name in ("H2O", "CO2"):
@@ -235,6 +237,6 @@ def gibbs(name: str, t: float, p: float, state: str = "equilibrium") -> float:
     return g
 
 
-def gibbs_j(name: str, t_k: float, p_bar: float, state: str = "equilibrium") -> float:
+def gibbs_j(name: str, t_k: float, p_bar: float, state: str = "equilibrium", dataset: str = "636") -> float:
     """G in J/mol at T (K) and P (bar)."""
-    return 1000.0 * gibbs(name, float(t_k), float(p_bar) / 1000.0, state)
+    return 1000.0 * gibbs(name, float(t_k), float(p_bar) / 1000.0, state, dataset)

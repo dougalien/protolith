@@ -93,7 +93,7 @@ class Pseudosection:
         return {
             "format": FORMAT, "version": VERSION,
             "bulk": {"wt_pct": self.bulk.wt_pct, "water": self.bulk.water, "name": self.bulk.name,
-                     "left_out": self.bulk.left_out},
+                     "system": self.bulk.system, "left_out": self.bulk.left_out},
             "t_c": list(self.t_c), "p_kbar": list(self.p_kbar),
             "points": [[pt.to_dict() if pt is not None else None for pt in row] for row in self.points],
             "failed": [list(f) for f in self.failed],
@@ -113,7 +113,8 @@ class Pseudosection:
         if d.get("version", 0) > VERSION:
             raise ValueError(f"pseudosection file version {d.get('version')} is newer than this app reads")
         b = d["bulk"]
-        ps = cls(from_wt_pct(b["wt_pct"], b["water"], b.get("name", "")), d["t_c"], d["p_kbar"],
+        ps = cls(from_wt_pct(b["wt_pct"], b["water"], b.get("name", ""), b.get("system", "metapelite")),
+                 d["t_c"], d["p_kbar"],
                  [[Point.from_dict(pt) if pt is not None else None for pt in row] for row in d["points"]],
                  failed=[tuple(f) for f in d.get("failed", [])])
         group(ps)

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .endmembers import DATA, OXIDES, R, gibbs
+from .endmembers import DATASETS, OXIDES, R, gibbs
 
 # a recipe term: (coefficient, dataset end member, order state)
 Term = tuple
@@ -32,23 +32,25 @@ class EndMemberDef:
     name: str
     recipe: tuple                 # ((coef, dataset name, state), ...)
     dqf: tuple = (0.0, 0.0, 0.0)  # a + b T + c P, kJ
+    dataset: str = "636"          # the end-member dataset the recipe is taken from
 
     def g(self, t: float, p: float) -> float:
         a, b, c = self.dqf
-        return sum(k * gibbs(n, t, p, s) for k, n, s in self.recipe) + a + b * t + c * p
+        return sum(k * gibbs(n, t, p, s, self.dataset) for k, n, s in self.recipe) + a + b * t + c * p
 
     def composition(self) -> np.ndarray:
         """Moles of each oxide in OXIDES."""
         out = np.zeros(len(OXIDES))
+        data = DATASETS[self.dataset]
         for k, n, _ in self.recipe:
-            out += k * np.array([DATA[n].comp.get(o, 0.0) for o in OXIDES])
+            out += k * np.array([data[n].comp.get(o, 0.0) for o in OXIDES])
         return out
 
 
-def em(name, *recipe, dqf=(0.0, 0.0, 0.0)):
+def em(name, *recipe, dqf=(0.0, 0.0, 0.0), dataset="636"):
     """em("obi", (1/3, "ann"), (2/3, "phl"), dqf=(-6, 0, 0)); a term may carry a state as third item."""
     terms = tuple((t[0], t[1], t[2] if len(t) > 2 else "equilibrium") for t in recipe)
-    return EndMemberDef(name, terms, dqf)
+    return EndMemberDef(name, terms, dqf, dataset)
 
 
 @dataclass(frozen=True)
@@ -67,15 +69,31 @@ class HPSolution:
     activities: dict              # end-member name -> Activity
     w: dict                       # (i, j) -> (a, b, c) for W = a + b T + c P
     v: tuple | None = None        # van Laar volumes (asymmetric), or None (symmetric)
+    # site fractions that are a ratio of two linear forms, {site: ({end member: coef}, {end member: coef})},
+    # e.g. the Fe/(Fe+Mg) of the metapelite melt; they may appear in activities like any other site
+    ratios: dict | None = None
     _a: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self):
         n, m = len(self.end_members), len(self.site_names)
-        idx = {s: j for j, s in enumerate(self.site_names)}
+        names = [e.name for e in self.end_members]
+        ratio_names = tuple(self.ratios or {})
+        idx = {s: j for j, s in enumerate(self.site_names + ratio_names)}
         self._a = np.zeros((m, n))
         for i, e in enumerate(self.end_members):
             for s, f in self.occupancy[e.name].items():
                 self._a[idx[s], i] = f
+        self._num = np.zeros((len(ratio_names), n))
+        self._den = np.zeros((len(ratio_names), n))
+        for r, site in enumerate(ratio_names):
+            num, den = self.ratios[site]
+            for e, c in num.items():
+                self._num[r, names.index(e)] = c
+            for e, c in den.items():
+                self._den[r, names.index(e)] = c
+        # rows that must stay >= 0: the linear sites and the ratios' numerators
+        self.constraints = np.vstack([self._a, self._num]) if ratio_names else self._a
+        m = m + len(ratio_names)
         self._act = []
         for e in self.end_members:
             act = self.activities[e.name]
@@ -108,7 +126,13 @@ class HPSolution:
         return g
 
     def site_fractions(self, prop) -> np.ndarray:
-        return self._a @ np.asarray(prop, float)
+        """The linear site fractions, then any ratio sites."""
+        prop = np.asarray(prop, float)
+        sf = self._a @ prop
+        if len(self._num):
+            with np.errstate(divide="ignore", invalid="ignore"):
+                sf = np.concatenate([sf, (self._num @ prop) / (self._den @ prop)])
+        return sf
 
     def ln_activity_ideal(self, prop) -> np.ndarray:
         sf = self.site_fractions(prop)
@@ -587,52 +611,6 @@ FLUID = HPSolution(
     _pairs(11, [_FL_W.get(i, 0.0) for i in range(55)]),
 )
 
-# ---- the Al-rich minerals of the metapelite set (White, Powell, Holland, Johnson and Green 2014) -------------
-# Staurolite, chloritoid and sapphirine, numbers as in MAGEMin's metapelite set (st_W14, ctd_W14, sa_W14),
-# taken at Douglas's request (2026-11-03).  The core has no MnO, so the Mn end members (mnstm, mnct) and the
-# Mn site fractions are left out; with MnO = 0 the models are the same.  Margarite needs no model of its own:
-# it is the mam end member of white mica, and the solver can hold two micas across the solvus.  These
-# phases are not in minimize.SOLUTION_PHASES (Magma's default); Metamorphism switches them on.
-STAUROLITE = HPSolution(
-    "st",
-    (em("mstm", (1, "mst"), dqf=(-8.0, 0.0, 0.0)), em("fst", (1, "fst")),
-     em("msto", (1, "andr"), (-1, "gr"), (1, "mst"), dqf=(9.0, 0.0, 0.0)),
-     em("mstt", (-1, "cor"), (1, "mst"), (1.5, "ru"), dqf=(13.0, 0.0, 0.0))),
-    ("xMgX", "xFeX", "xAlY", "xFe3Y", "xTiY", "xvY"),
-    {"mstm": {"xMgX": 1, "xAlY": 1}, "fst": {"xFeX": 1, "xAlY": 1}, "msto": {"xMgX": 1, "xFe3Y": 1},
-     "mstt": {"xMgX": 1, "xTiY": 0.75, "xvY": 0.25}},
-    {"mstm": A(xMgX=4, xAlY=2), "fst": A(xFeX=4, xAlY=2), "msto": A(xMgX=4, xFe3Y=2),
-     "mstt": A(3.0792, xMgX=4, xTiY=1.5, xvY=0.5)},
-    # W of (mstm fst, mstm msto, mstm mstt, fst msto, fst mstt, msto mstt); W14's pairs with mnstm dropped
-    _pairs(4, [16.0, 2.0, 20.0, 18.0, 36.0, 30.0]),
-)
-
-CHLORITOID = HPSolution(
-    "ctd",
-    (em("mctd", (1, "mctd")), em("fctd", (1, "fctd")),
-     em("ctdo", (0.25, "andr"), (-0.25, "gr"), (1, "mctd"), dqf=(13.5, 0.0, 0.0))),
-    ("xAlM1A", "xFe3M1A", "xFeM1B", "xMgM1B"),
-    {"mctd": {"xAlM1A": 1, "xMgM1B": 1}, "fctd": {"xAlM1A": 1, "xFeM1B": 1}, "ctdo": {"xFe3M1A": 1, "xMgM1B": 1}},
-    {"mctd": A(xAlM1A=0.5, xMgM1B=1), "fctd": A(xAlM1A=0.5, xFeM1B=1), "ctdo": A(xFe3M1A=0.5, xMgM1B=1)},
-    _pairs(3, [4.0, 1.0, 5.0]),              # mctd fctd, mctd ctdo, fctd ctdo
-)
-
-SAPPHIRINE = HPSolution(
-    "sa",
-    (em("spr4", (1, "spr4")), em("spr5", (1, "spr5")), em("fspm", (1, "fspr"), dqf=(-2.0, 0.0, 0.0)),
-     em("spro", (0.75, "fspr"), (0.25, "spr4"), dqf=(-3.5, 0.0, 0.0)),
-     em("ospr", (0.5, "andr"), (-0.5, "gr"), (1, "spr5"), dqf=(-16.0, 0.0, 0.0))),
-    ("xMgM3", "xFeM3", "xFe3M3", "xAlM3", "xMgM456", "xFeM456", "xSiT", "xAlT"),
-    {"spr4": {"xMgM3": 1, "xMgM456": 1, "xSiT": 1}, "spr5": {"xAlM3": 1, "xMgM456": 1, "xAlT": 1},
-     "fspm": {"xFeM3": 1, "xFeM456": 1, "xSiT": 1}, "spro": {"xMgM3": 1, "xFeM456": 1, "xSiT": 1},
-     "ospr": {"xFe3M3": 1, "xMgM456": 1, "xAlT": 1}},
-    {"spr4": A(xMgM3=1, xMgM456=3, xSiT=1), "spr5": A(xAlM3=1, xMgM456=3, xAlT=1),
-     "fspm": A(xFeM3=1, xFeM456=3, xSiT=1), "spro": A(xMgM3=1, xFeM456=3, xSiT=1),
-     "ospr": A(xFe3M3=1, xMgM456=3, xAlT=1)},
-    _pairs(5, [(10.0, 0.0, -0.02), 16.0, 12.0, (8.0, 0.0, -0.02), (19.0, 0.0, -0.02), (22.0, 0.0, -0.02), 1.0,
-               4.0, (17.6, 0.0, -0.02), (20.0, 0.0, -0.02)]),
-)
-
 SOLUTIONS = {s.name: s for s in (OLIVINE, FELDSPAR, SPINEL, ILMENITE, GARNET, BIOTITE, MUSCOVITE,
                                     ORTHOPYROXENE, CLINOPYROXENE, AMPHIBOLE, CORDIERITE, EPIDOTE, CHLORITE,
-                                    LIQUID, FLUID, STAUROLITE, CHLORITOID, SAPPHIRINE)}
+                                    LIQUID, FLUID)}

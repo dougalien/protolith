@@ -15,7 +15,7 @@ def grid():
 
 
 def _stable(t_c, p):
-    g = {n: gibbs(n, t_c + 273.15, p) for n in ("ky", "sill", "and")}
+    g = {n: gibbs(n, t_c + 273.15, p, dataset="62") for n in ("ky", "sill", "and")}   # (the metapelite set)
     return {"ky": "Ky", "sill": "Sil", "and": "And"}[min(g, key=g.get)]
 
 
