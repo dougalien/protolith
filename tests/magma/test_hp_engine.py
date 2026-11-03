@@ -1,4 +1,4 @@
-"""The Holland & Powell engine adapter (magma.hp.engine) and the solver's oxygen buffer and warm starts."""
+"""The Holland & Powell engine adapter (protolith.core.hp.engine) and the solver's oxygen buffer and warm starts."""
 import json
 from pathlib import Path
 
@@ -7,8 +7,8 @@ import pytest
 
 from magma.composition import PRESETS, Composition
 from magma.hp import engine
-from magma.hp.endmembers import R, gibbs
-from magma.hp.minimize import COMPONENTS, equilibrate
+from protolith.core.hp.endmembers import R, gibbs
+from protolith.core.hp.minimize import COMPONENTS, equilibrate
 
 POINTS = json.loads((Path(__file__).parent / "data" / "hp_magemin_points.json").read_text())["points"]
 WET_BASALT = next(pt for pt in POINTS if pt["P"] == 3.0 and pt["T_C"] == 950 and pt["bulk"][10] > 0)

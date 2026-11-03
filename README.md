@@ -16,12 +16,24 @@ Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.
 | --- | --- |
 | `src/magma/` | the Magma module (melting, crystallization; Holland & Powell and MELTS engines) |
 | `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport) |
-| `src/protolith/` | shared code: the sample file and the links between modules |
+| `src/protolith/core/` | the shared thermodynamic core: the Holland & Powell dataset, solution models and solver (no user interface) |
+| `src/protolith/` | shared code: the core, the sample file and the links between modules |
 | `src/protolith/app/` | the shell: the home window, and every module running in one program |
-| `tests/magma/`, `tests/reaction/`, `tests/protolith/` | each module's own tests, plus the link tests |
+| `tests/core/`, `tests/magma/`, `tests/reaction/`, `tests/protolith/` | the core's tests, each module's own tests, plus the link tests |
 | `docs/magma/`, `docs/reaction/` | each module's own design notes and README |
 | `packaging/protolith/` | the build of Protolith.exe (one file with every module) |
 | `packaging/magma/`, `packaging/reaction/` | the original exe builds, kept for reference |
+
+## The shared core
+
+`protolith.core.hp` is the Holland & Powell system every module computes with: the ds6.36 end members
+(`endmembers`), the igneous solution models including melt and fluid (`solutions`), and the Gibbs energy
+minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Magma, which now runs its
+HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
+modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
+
+Next on the plan: Reaction moves its minerals onto this core, checked case by case against its current
+results, then Metamorphism runs the same minimizer on a T-P grid.
 
 ## The sample file (version 1)
 

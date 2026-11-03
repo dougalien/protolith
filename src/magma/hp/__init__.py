@@ -1,6 +1,6 @@
-"""The Holland & Powell thermodynamic system: a second engine for Magma, beside the MELTS one in magma.thermo.
+"""Magma's Holland & Powell engine: the adapter (``engine``) that runs cooling and melting paths on the
+shared core in ``protolith.core.hp``, beside the MELTS engine in ``magma.thermo``.
 
-Parameter values from the Holland & Powell end-member dataset and the igneous solution models
-(Holland and Powell 2011; Green et al. 2016; Holland, Green and Powell 2018), numbers as distributed in
-MAGEMin, taken with Douglas's approval (2026-11-02).  The code is our own, written from the papers' equations.
+The dataset, solution models and solver themselves live in the core, so other modules use the same
+Gibbs energies.  See ``protolith.core.hp`` for their sources.
 """

@@ -15,7 +15,8 @@ a = Analysis(
            (str(SRC / "magma" / "app" / "static"), "magma/app/static"),
            (str(SRC / "reaction" / "data" / "*.tsv"), "reaction/data"),
            (str(SRC / "reaction" / "app" / "static"), "reaction/app/static"),
-           (str(SRC / "protolith" / "app" / "static"), "protolith/app/static")],
+           (str(SRC / "protolith" / "app" / "static"), "protolith/app/static"),
+           (str(SRC / "protolith" / "core" / "data" / "*.tsv"), "protolith/core/data")],
     # the modules' servers are imported when the shell starts them
     hiddenimports=["magma.app.server", "reaction.app.server", "protolith.reaction_link", "protolith.magma_link"],
     excludes=["matplotlib", "pandas", "tkinter", "pytest", "IPython"],

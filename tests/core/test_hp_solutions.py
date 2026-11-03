@@ -1,12 +1,12 @@
-"""Holland & Powell solid solutions (magma.hp.solutions) against MAGEMin and their own definitions."""
+"""Holland & Powell solid solutions (protolith.core.hp.solutions) against MAGEMin and their own definitions."""
 import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from magma.hp.endmembers import OXIDES
-from magma.hp.solutions import SOLUTIONS
+from protolith.core.hp.endmembers import OXIDES
+from protolith.core.hp.solutions import SOLUTIONS
 
 IG = ["SiO2", "Al2O3", "CaO", "MgO", "FeO", "K2O", "Na2O", "TiO2", "O", "Cr2O3", "H2O"]
 POINTS = json.loads((Path(__file__).parent / "data" / "hp_magemin_points.json").read_text())["points"]

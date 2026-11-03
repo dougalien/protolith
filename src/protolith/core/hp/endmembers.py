@@ -57,7 +57,7 @@ class EndMember:
 
 
 def _load(file: str = "hp_ds636.tsv") -> dict[str, EndMember]:
-    text = resources.files("magma.data").joinpath(file).read_text("utf-8")
+    text = resources.files("protolith.core.data").joinpath(file).read_text("utf-8")
     rows = [ln for ln in text.splitlines() if ln and not ln.startswith("#")]
     out = {}
     for r in csv.DictReader(rows, delimiter="\t"):

@@ -22,6 +22,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "magma.data" = ["*.tsv"]
+"protolith.core.data" = ["*.tsv"]
 "magma.app" = ["static/*"]
 "reaction.app" = ["static/*"]
 "protolith.app" = ["static/*"]
