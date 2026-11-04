@@ -1,6 +1,6 @@
 # PyInstaller recipe for Protolith.exe: one file holding Python, numpy, scipy, the shell and every module
-# (Magma, Reaction) with their windows and data tables.  Reaction's thermodynamic databases are not inside
-# it; as for Reaction.exe they stay in %LOCALAPPDATA%\Reaction\external (scripts\fetch_references.ps1).
+# (Magma, Reaction) with their windows and data tables, including Reaction's OBIGT and EQ3/6 ion-size data
+# (src/reaction/data/reference, see its NOTICE.md).
 # Build from the repository root with packaging\protolith\build_exe.ps1.
 from pathlib import Path
 
@@ -14,6 +14,7 @@ a = Analysis(
     datas=[(str(SRC / "magma" / "data" / "*.tsv"), "magma/data"),
            (str(SRC / "magma" / "app" / "static"), "magma/app/static"),
            (str(SRC / "reaction" / "data" / "*.tsv"), "reaction/data"),
+           (str(SRC / "reaction" / "data" / "reference"), "reaction/data/reference"),
            (str(SRC / "reaction" / "app" / "static"), "reaction/app/static"),
            (str(SRC / "protolith" / "app" / "static"), "protolith/app/static"),
            (str(SRC / "protolith" / "core" / "data" / "*.tsv"), "protolith/core/data")],
