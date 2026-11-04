@@ -21,8 +21,9 @@ def test_assemblage_and_potentials_match_magemin(p, t_c):
     r = equilibrate(pt["bulk"], t_c + 273.15, p)
     assert r.converged
     assert sorted(ph.name for ph in r.phases) == sorted(ph["name"] for ph in pt["phases"])
-    ref = np.array([pt["gamma"][c] for c in COMPONENTS])
-    present = np.array(pt["bulk"]) > 0
+    ref = np.array([pt["gamma"].get(c, 0.0) for c in COMPONENTS])     # (the reference has no MnO)
+    present = np.zeros(len(COMPONENTS), bool)
+    present[:len(pt["bulk"])] = np.array(pt["bulk"]) > 0
     assert np.max(np.abs(r.gamma - ref)[present]) < 0.01
 
 
@@ -30,4 +31,5 @@ def test_mass_balance():
     pt = _find(5.0, 800)
     r = equilibrate(pt["bulk"], 1073.15, 5.0)
     total = sum(ph.oxide_moles for ph in r.phases)
-    assert np.allclose(total, pt["bulk"], atol=1e-8)
+    assert np.allclose(total[:len(pt["bulk"])], pt["bulk"], atol=1e-8)
+    assert np.all(total[len(pt["bulk"]):] == 0)

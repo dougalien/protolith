@@ -1,0 +1,38 @@
+/* Metamorphism: what app.css (shared with Magma) does not have */
+.grid4 { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px 8px; align-items: center; }
+.grid3 { display: grid; grid-template-columns: 4.5em 1fr 1fr; gap: 6px 8px; align-items: center; }
+.sourcebox { border: 1px solid var(--line); border-left: 4px solid var(--slate); border-radius: var(--radius);
+  padding: 8px 10px; margin: 8px 0 4px; }
+.seg button:disabled { color: var(--faint); cursor: not-allowed; }
+.pswrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .pswrap { grid-template-columns: minmax(0, 1fr); } }
+.psplot { position: relative; }
+.psplot svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.psplot svg text { font-family: var(--font); }
+.fieldlist { max-height: 520px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.fieldlist button { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 6px; text-align: left; padding: 3px 6px;
+  border-color: transparent; background: transparent; }
+.fieldlist button:hover, .fieldlist button.on { border-color: var(--accent); background: var(--accent-bg); }
+.fieldlist .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fieldlist .var { color: var(--faint); }
+.scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.scale .ramp { flex: 0 0 160px; height: 10px; border-radius: 3px; }
+.assemblage { font-size: 16px; font-weight: 600; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); margin: 4px 0 10px; }
+table.minerals td.f { font-family: var(--font); font-size: 13px; text-align: left; white-space: normal; }
+#ps-panel { position: relative; }
+[hidden] { display: none !important; }
+.events { margin: 0; padding-left: 1.3em; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.events .in { color: var(--s3); font-weight: 600; }
+.events .out { color: var(--s8); font-weight: 600; }
+.events li.on { background: var(--accent-bg); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.chips { display: inline-flex; flex-wrap: wrap; gap: 4px; vertical-align: middle; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--accent-bg); border: 1px solid var(--line);
+  font-size: 12px; font-weight: 600; line-height: 18px; color: var(--ink); }
+.chip.fluid { background: transparent; color: var(--muted); font-weight: 400; }
+.assemblage .chip { font-size: 14px; line-height: 22px; padding: 1px 10px; }
+.chips.in .chip { border-color: var(--s3); }
+.chips.out .chip { border-color: var(--s8); text-decoration: line-through; color: var(--muted); }
+sub, sup { font-size: 72%; line-height: 0; }

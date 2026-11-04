@@ -21,16 +21,39 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.optimize import linprog, minimize
 
-from .endmembers import DATA, OXIDES, R, gibbs
+from .endmembers import DATASETS, OXIDES, R, gibbs
 from .solutions import SOLUTIONS, HPSolution
+from .solutions_mp import SOLUTIONS_MP
 
-COMPONENTS = ("SiO2", "Al2O3", "CaO", "MgO", "FeO", "K2O", "Na2O", "TiO2", "O", "Cr2O3", "H2O")
+# MnO is last so that the first eleven keep the places they had before it was added (2026-11-03)
+COMPONENTS = ("SiO2", "Al2O3", "CaO", "MgO", "FeO", "K2O", "Na2O", "TiO2", "O", "Cr2O3", "H2O", "MnO")
 _IDX = [OXIDES.index(o) for o in COMPONENTS]
 
 # pure phases of the igneous set (MAGEMin's list less the buffers, O2 and pure H2O, which the fluid covers)
 PURE_PHASES = ("q", "crst", "trd", "coe", "stv", "ky", "sill", "and", "ru", "sph", "cor", "ne")
 SOLUTION_PHASES = ("liq", "fl", "ol", "opx", "cpx", "g", "spl", "ilm", "fsp", "amp", "bi", "mu", "cd", "ep", "chl")
 MELT_MIN_T = 773.15          # K; no liquid below this (as in MAGEMin)
+# pure phases of the metapelite set (MAGEMin's list less the buffers and O2); water is pure H2O, no fluid model
+MP_PURE_PHASES = ("q", "crst", "trd", "coe", "stv", "ky", "sill", "and", "ru", "sph", "zo", "cor", "H2O")
+
+
+@dataclass(frozen=True)
+class PhaseSet:
+    """A consistent set of phases: solution models, pure phases and the end-member dataset they use."""
+    name: str
+    solutions: dict
+    pure: tuple
+    default: tuple                # the solution phases switched on when none are named
+    dataset: str
+
+
+IGNEOUS = PhaseSet("igneous", SOLUTIONS, PURE_PHASES, SOLUTION_PHASES, "636")
+# MAGEMin's metapelite set carries two alternative models of two phases and uses one of each: spinel
+# (sp, "Sp LT") rather than magnetite (mt), and ilmenite without Mg and Mn (ilm) rather than ilmm (its
+# defaults mpSp = 0, mpIlm = 0).  The default here is the same; name mt or ilmm in `phases` to use them.
+METAPELITE = PhaseSet("metapelite", SOLUTIONS_MP, MP_PURE_PHASES,
+                      tuple(n for n in SOLUTIONS_MP if n not in ("mt", "ilmm")), "62")
+PHASE_SETS = {s.name: s for s in (IGNEOUS, METAPELITE)}
 SF_MIN = 1e-10
 TRACE = 2e-5                 # mole fraction below which a component is left out
 
@@ -77,7 +100,7 @@ class _Reduced:
         # an end member made with a negative amount of an absent component is still impossible
         self.s, self.keep = s, np.where(keep)[0]
         self.comp = comp[self.keep]
-        self.a = s._a[:, self.keep]
+        self.a = s.constraints[:, self.keep]
         used = np.any(self.a != 0, axis=1)
         self.a_used = self.a[used]
         # end members that alone fill some site species can never be negative: the Newton polish
@@ -151,7 +174,7 @@ def o2_potential(t_k: float, log_fo2: float) -> float:
 
 def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 120, tol: float = 1e-4,
                 seed: int = 0, verbose: bool = False, log_fo2: float | None = None,
-                previous: Result | None = None) -> Result:
+                previous: Result | None = None, system: PhaseSet = IGNEOUS) -> Result:
     """Stable assemblage of `bulk` (moles of COMPONENTS) at T (K) and P (kbar).
 
     log_fo2: if given, oxygen is open: an O2 reservoir at this fugacity (log10 bar) exchanges O with the
@@ -162,6 +185,8 @@ def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 12
     force does the full search run, starting from its compositions.
     """
     bulk = np.asarray(bulk, float).copy()
+    if len(bulk) < len(COMPONENTS):                 # a bulk written before MnO was added: no MnO
+        bulk = np.concatenate([bulk, np.zeros(len(COMPONENTS) - len(bulk))])
     # a component below TRACE of the bulk (a few ppm) is dropped: the starting columns of a solution
     # always carry some of each of their components, so a trace one would make mass balance impossible
     bulk[bulk < TRACE * bulk[bulk > 0].sum()] = 0.0
@@ -170,21 +195,22 @@ def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 12
     if log_fo2 is not None:
         present[io] = present[io] or present[COMPONENTS.index("FeO")]
     rng = np.random.default_rng(seed)
-    names = [n for n in (phases or SOLUTION_PHASES) if n in SOLUTIONS]
+    names = [n for n in (phases or system.default) if n in system.solutions]
     if t_k < MELT_MIN_T:
         names = [n for n in names if n != "liq"]
     reduced = {}
     for n in names:
-        r = _Reduced(SOLUTIONS[n], present)
+        r = _Reduced(system.solutions[n], present)
         if len(r.keep):
             reduced[n] = r
 
     # columns: (phase name, q or None, composition, g)
     cols = []
-    for n in PURE_PHASES:
-        c = np.array([DATA[n].comp.get(o, 0.0) for o in COMPONENTS])
+    data = DATASETS[system.dataset]
+    for n in system.pure:
+        c = np.array([data[n].comp.get(o, 0.0) for o in COMPONENTS])
         if np.all((c == 0) | present):
-            cols.append((n, None, c, gibbs(n, t_k, p_kbar)))
+            cols.append((n, None, c, gibbs(n, t_k, p_kbar, "equilibrium", system.dataset)))
     warm = {}
     for ph in (previous.phases if previous is not None else []):
         if ph.prop is not None and ph.name in reduced:
@@ -215,7 +241,8 @@ def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 12
                     cols.append((n, q, q @ r.comp, g))
 
     if previous is not None:
-        fast = _from_previous(previous, reduced, cols, bulk, present, o2_col, t_k, p_kbar, tol, rng)
+        fast = _from_previous(previous, reduced, cols, bulk, present, o2_col, t_k, p_kbar, tol, rng,
+                              system.dataset)
         if fast is not None:
             phases_out, gamma, bulk_out, worst = fast
             phases_out = _merge_twins(phases_out)
@@ -226,7 +253,7 @@ def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 12
         # the old assemblage could not be carried over: search from scratch.  (Seeding the search with
         # the old melt can stall it: in fractional crystallization that melt column equals the bulk.)
         return equilibrate(bulk, t_k, p_kbar, phases=phases, max_iter=max_iter, tol=tol, seed=seed,
-                           verbose=verbose, log_fo2=log_fo2, previous=None)
+                           verbose=verbose, log_fo2=log_fo2, previous=None, system=system)
 
     b = bulk[present]
     gamma = np.zeros(len(COMPONENTS))
@@ -303,14 +330,15 @@ def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 12
     return Result(t_k, p_kbar, bulk, phases_out, gamma, total_g, it, converged, worst)
 
 
-def _from_previous(previous, reduced, cols, bulk, present, o2_col, t, p, tol, rng):
+def _from_previous(previous, reduced, cols, bulk, present, o2_col, t, p, tol, rng, dataset="636"):
     """Solve the previous assemblage exactly at the new conditions; None unless it is still stable."""
     phases = []
     for ph in previous.phases:
         if ph.prop is None:
             if not np.all((ph.composition == 0) | present):
                 return None
-            phases.append(Phase(ph.name, ph.amount, None, ph.end_members, ph.composition, gibbs(ph.name, t, p)))
+            phases.append(Phase(ph.name, ph.amount, None, ph.end_members, ph.composition,
+                                gibbs(ph.name, t, p, "equilibrium", dataset)))
         else:
             if ph.name not in reduced:
                 return None
