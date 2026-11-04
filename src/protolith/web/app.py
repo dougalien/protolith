@@ -64,8 +64,8 @@ def home_page() -> None:
         with c.container(border=True):
             st.markdown(f"<img src='{_svg(key + '_mark.svg')}' width='30'> &nbsp;**{name}**", unsafe_allow_html=True)
             st.caption(about)
-            st.link_button(f"Open {name}", f"./{key}?w={wid}", type="primary", use_container_width=True)
-            st.link_button("Results window", f"./{key}-results?w={wid}", use_container_width=True,
+            st.link_button(f"Open {name}", f"./{key}?w={wid}", type="primary", width="stretch")
+            st.link_button("Results window", f"./{key}-results?w={wid}", width="stretch",
                            help="The results in a window of its own, to drag to another screen")
     for c, (name, about) in zip(cols[len(mods):], PLANNED):
         with c.container(border=True):
@@ -111,11 +111,11 @@ def magma_handoff(state, snap) -> None:
         smp = _stamp(smp)
         name = f"magma_{smp.conditions['t_c']:.0f}C{'_rock' if smp.melt is None else ''}.sample"
         c.download_button("Save sample", json.dumps(smp.to_dict(), indent=1), file_name=name,
-                          mime="application/json", use_container_width=True)
+                          mime="application/json", width="stretch")
         a, b, c = st.columns(3)
         take = a.selectbox("Put on Reaction's card", list(TAKE), format_func=TAKE.get, key="smp-take")
         grams = b.number_input("Grams per kg of water", min_value=0.001, value=100.0, step=10.0, key="smp-grams")
-        if c.button("Send to Reaction", type="primary", use_container_width=True):
+        if c.button("Send to Reaction", type="primary", width="stretch"):
             wid, sess = reaction_web.workspace()
             from reaction.app.server import load_sample
             out = load_sample(sess, smp.to_dict(), grams, take)
