@@ -58,6 +58,20 @@ Nothing is dropped silently: whatever Reaction has no mineral for is listed with
 for the card. Titanium now goes on as rutile, ilmenite or sphene and dissolves as Ti(OH)4, Ti(OH)3+ and
 Ti(OH)5- (`src/reaction/thermo/titanium.py`, from Knauss et al. 2001 and Antignano and Manning 2008).
 
+## On the web (Streamlit)
+
+Protolith also runs as a hosted Streamlit app. The home page links each module's two windows:
+Magma (`/magma`, `/magma-results`) and Reaction (`/reaction`, `/reaction-results`, plus `/sources`).
+Each can sit in its own browser window or screen. One private `?w=` id in the address is shared by all
+of a visitor's windows, so Magma's **Send to Reaction** puts a step straight on that visitor's Reaction
+card. **Save sample** downloads the same `.sample` file that Reaction's **Open sample** reads.
+The science code is the same as the desktop app; only the front ends (`src/*/web/`) are new.
+
+    pip install -r requirements.txt
+    streamlit run streamlit_app.py
+
+On Streamlit Community Cloud: New app, this repository, entry point `streamlit_app.py`.
+
 ## Running
 
     python -m pip install numpy scipy pytest
