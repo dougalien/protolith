@@ -54,12 +54,17 @@ _CATION = {"SiO2": ("Si", 1, 2), "TiO2": ("Ti", 1, 2), "Al2O3": ("Al", 2, 3), "C
            "MgO": ("Mg", 1, 1), "CaO": ("Ca", 1, 1), "Na2O": ("Na", 2, 1), "K2O": ("K", 2, 1)}
 
 
+# components of the shared core that no igneous phase takes: left out, as the notes say (the core gained
+# MnO for the metapelite set on 2026-11-03; with it in the bulk the igneous solve had no phase for it)
+LEFT_OUT = ("MnO",)
+
+
 def to_components(bulk: Composition) -> np.ndarray:
     """Moles of COMPONENTS in 100 g of the composition (normalized)."""
     n = bulk.normalized().moles()
     out = np.zeros(len(COMPONENTS))
     for c in COMPONENTS:
-        if c in ("FeO", "O"):
+        if c in ("FeO", "O") or c in LEFT_OUT:
             continue
         out[_I[c]] = n.get(c, 0.0)
     out[_I["FeO"]] = n.get("FeO", 0.0) + 2.0 * n.get("Fe2O3", 0.0)
