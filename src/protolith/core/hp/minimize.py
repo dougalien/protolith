@@ -109,6 +109,9 @@ class _Reduced:
         self.positive = np.zeros(len(self.keep), bool)
         for row in self.a_used[only]:
             self.positive[np.where(row != 0)[0][0]] = True
+        sub = s.restricted(self.keep)
+        self._mu, self._jac = sub.mu, sub.mu_jacobian
+        self.newton = _gibbs_duhem_holds(sub)
 
     def full(self, q: np.ndarray) -> np.ndarray:
         p = np.zeros(self.s.n)
@@ -116,13 +119,113 @@ class _Reduced:
         return p
 
     def mu(self, q, t, p):
-        return self.s.mu(self.full(q), t, p)[self.keep]
+        return self._mu(q, t, p)
 
     def g(self, q, t, p) -> float:
         return float(q @ self.mu(q, t, p))
 
     def feasible(self, q) -> bool:
         return bool(np.all(self.a_used @ q >= -1e-12))
+
+
+_BASIS = {}
+_GD = {}
+
+
+def _gibbs_duhem_holds(sub) -> bool:
+    """Whether sum_k q_k d mu_k = 0 along the composition (so that mu - c.gamma is the gradient of the
+    driving force, which the Newton search needs).  It fails for a model whose activities are not
+    those of one G(q), such as the metapelite spinel with its ratio sites: those keep SLSQP."""
+    key = (id(sub.s), tuple(sub.keep))
+    ok = _GD.get(key)
+    if ok is None:
+        n = len(sub.keep)
+        ok = True
+        if n > 1:
+            q = np.full(n, 1.0 / n)
+            out = sub.mu_jacobian(q, 1000.0, 5.0)
+            if out is None:
+                ok = False
+            else:
+                res = q @ out[1] @ _tangent_basis(n)
+                ok = bool(np.max(np.abs(res)) < 1e-8 * max(1.0, np.max(np.abs(out[1]))))
+        _GD[key] = ok
+    return ok
+
+
+def _tangent_basis(n: int) -> np.ndarray:
+    """Orthonormal basis (n, n-1) of the directions with sum zero."""
+    z = _BASIS.get(n)
+    if z is None:
+        q, _ = np.linalg.qr(np.column_stack([np.ones(n), np.eye(n)[:, :n - 1]]))
+        z = _BASIS[n] = q[:, 1:]
+    return z
+
+
+def _newton_df(r: _Reduced, cg, t, p, q0, max_iter: int = 60):
+    """Minimize f(q) = q . (mu(q) - cg) on sum q = 1 with every site fraction > 0, by Newton steps with
+    the exact second derivatives (mu_jacobian).  The RT ln terms keep the minimum off the sites' edges,
+    so the steps only have to stop short of an edge.  Returns (f, q), or None when this does not apply
+    (a model without Gibbs-Duhem, a start on an edge, no convergence): the caller then uses SLSQP.
+    It finds the same minima as SLSQP (tests/core/test_hp_fast_paths.py) in a few iterations, where
+    SLSQP took about 60, and with much less Python overhead per iteration."""
+    if not r.newton:
+        return None
+    n = len(q0)
+    q = np.asarray(q0, float) / np.sum(q0)
+    if r.a_used.size and np.min(r.a_used @ q) <= SF_MIN:
+        return None
+    if n == 1:
+        with np.errstate(invalid="ignore", divide="ignore"):
+            mu = r.mu(q, t, p)
+        return (float(q @ (mu - cg)), q) if np.all(np.isfinite(mu)) else None
+    z = _tangent_basis(n)
+    out = r._jac(q, t, p)
+    if out is None:
+        return None
+    mu, jac = out
+    g = mu - cg
+    f = float(q @ g)
+    for _ in range(max_iter):
+        gz = z.T @ g
+        # converged: the gradient is at the rounding level of mu (kJ values of 1e3 carry ~1e-12 relative)
+        if np.max(np.abs(gz)) < 1e-8:
+            return (f, q) if np.isfinite(f) else None
+        h = z.T @ (0.5 * (jac + jac.T)) @ z
+        try:
+            dz = -np.linalg.solve(h, gz)
+            if gz @ dz >= 0:            # not a descent direction (inside a solvus): shift the Hessian
+                raise np.linalg.LinAlgError
+        except np.linalg.LinAlgError:
+            w = np.linalg.eigvalsh(h)
+            shift = max(0.0, -w[0]) + 1e-6 * max(1.0, abs(w[-1]))
+            dz = -np.linalg.solve(h + shift * np.eye(n - 1), gz)
+        d = z @ dz
+        # the longest step that keeps every site fraction above zero (with a margin)
+        ad = r.a_used @ d
+        aq = r.a_used @ q
+        neg = ad < 0
+        step = 1.0
+        if np.any(neg):
+            step = min(1.0, 0.9 * float(np.min((aq[neg] - SF_MIN) / -ad[neg])))
+        slope = float(g @ d)
+        noise = 1e-12 * (abs(float(q @ mu)) + abs(float(q @ cg)) + 1.0)
+        while step > 1e-10:
+            qn = q + step * d
+            with np.errstate(invalid="ignore", divide="ignore"):
+                mun = r.mu(qn, t, p)
+            fn = float(qn @ (mun - cg))
+            if np.isfinite(fn) and fn <= f + 1e-4 * step * slope + noise:
+                break
+            step *= 0.5
+        else:
+            return None
+        out = r._jac(qn, t, p)
+        if out is None:
+            return None
+        q, (mu, jac), f = qn, out, fn
+        g = mu - cg
+    return None
 
 
 def _driving_force_min(r: _Reduced, gamma, t, p, starts, rng):
@@ -142,8 +245,13 @@ def _driving_force_min(r: _Reduced, gamma, t, p, starts, rng):
 
     out = []
     for q0 in starts:
+        found = _newton_df(r, cg, t, p, q0)
+        if found is not None:
+            out.append(found)
+            continue
         try:
-            res = minimize(lambda q: f(q)[0], q0, jac=lambda q: f(q)[1], method="SLSQP", constraints=cons,
+            # f gives the value and the gradient together: one evaluation of mu per point, not two
+            res = minimize(f, q0, jac=True, method="SLSQP", constraints=cons,
                            options={"maxiter": 200, "ftol": 1e-10})
         except (ValueError, FloatingPointError):
             continue
@@ -517,80 +625,142 @@ def _polish(phases, reduced, bulk, gamma, t, p, max_iter: int = 80, o2_mu: float
             x0.append(np.concatenate([[np.log(max(ph.amount, 1e-30))], z]))
     x = np.concatenate(x0 + [gamma[present]] + ([[0.0]] if o2_mu is not None else []))
     nvar = len(x)
-    pure_c = {ph.name: ph.composition[present] for ph in phases if ph.prop is None}
-    pure_g = {ph.name: ph.g for ph in phases if ph.prop is None}
     b = bulk[present]
 
-    def unpack(x, sums=None):
-        out, k = [], 0
-        for kind, name, r, size in blocks:
+    # layout of x and of the residual: one proportion-sum row per solution phase, then each phase's
+    # rows (one per end member, or one for a pure phase), then the O2 row (open oxygen), then mass balance
+    n_ss = sum(1 for kind, *_ in blocks if kind == "ss")
+    var0, row0, sum_row, comp = [], [], [], []
+    v, row, k_ss = 0, n_ss, 0
+    for (kind, name, r, size), ph in zip(blocks, phases):
+        var0.append(v)
+        row0.append(row)
+        v += size
+        if kind == "ss":
+            sum_row.append(k_ss)
+            k_ss += 1
+            row += len(r.keep)
+            comp.append(r.comp[:, present])
+        else:
+            sum_row.append(None)
+            row += 1
+            comp.append(ph.composition[present])
+    gam0 = v
+    o2_row = row if o2_mu is not None else None
+    mass0 = row + (1 if o2_mu is not None else 0)
+    nrow = mass0 + nc
+    pure_g = {ph.name: ph.g for ph in phases if ph.prop is None}
+
+    def ss_part(r, v):
+        """(proportion-sum residual, mu, moles of components) of a solution phase from its unknowns."""
+        q = np.where(r.positive, np.exp(np.minimum(v[1:], 50.0)), v[1:])
+        n = np.exp(min(v[0], 50.0)) * q
+        tot = n.sum()
+        if tot <= 0:
+            return None
+        qn = n / tot
+        if not r.feasible(qn) or np.any(r.a_used @ qn <= 0):
+            return None
+        mu = r.mu(qn, t, p)
+        if not np.all(np.isfinite(mu)):
+            return None
+        return q.sum() - 1.0, mu, n
+
+    def unpack(x):
+        out = []
+        for (kind, name, r, size), k in zip(blocks, var0):
             v = x[k:k + size]
             if kind == "ss":
                 q = np.where(r.positive, np.exp(np.minimum(v[1:], 50.0)), v[1:])
-                if sums is not None:
-                    sums.append(q.sum() - 1.0)
                 v = np.exp(min(v[0], 50.0)) * q
             out.append(v)
-            k += size
-        return out, x[k:k + nc]
+        return out, x[gam0:gam0 + nc]
 
-    def residual(x):
-        sums = []
-        parts, gam = unpack(x, sums)
-        res, mass = [sums], np.zeros(nc)
-        for (kind, name, r, size), n in zip(blocks, parts):
+    def residual(x, keep=None):
+        """The residual vector, or None; `keep` (a list) receives each phase's ss_part for the Jacobian."""
+        gam = x[gam0:gam0 + nc]
+        f = np.empty(nrow)
+        mass = np.zeros(nc)
+        for i, (kind, name, r, size) in enumerate(blocks):
+            v, c, r0 = x[var0[i]:var0[i] + size], comp[i], row0[i]
             if kind == "pure":
-                res.append([pure_g[name] - pure_c[name] @ gam])
-                mass += n[0] * pure_c[name]
+                f[r0] = pure_g[name] - c @ gam
+                mass += v[0] * c
+                part = None
             else:
-                tot = n.sum()
-                if tot <= 0:
+                part = ss_part(r, v)
+                if part is None:
                     return None
-                q = n / tot
-                if not r.feasible(q) or np.any(r.a_used @ q <= 0):
-                    return None
-                mu = r.mu(q, t, p)
-                res.append(mu - r.comp[:, present] @ gam)
-                mass += n @ r.comp[:, present]
+                s_, mu, n = part
+                f[sum_row[i]] = s_
+                f[r0:r0 + len(mu)] = mu - c @ gam
+                mass += n @ c
+            if keep is not None:
+                keep.append(part)
         if o2_mu is not None:
             mass[jo] += x[-1]
-            res.append([2.0 * gam[jo] - o2_mu])
-        res.append(mass - b)
-        f = np.concatenate(res)
+            f[o2_row] = 2.0 * gam[jo] - o2_mu
+        f[mass0:] = mass - b
         return f if np.all(np.isfinite(f)) else None
 
-    f = residual(x)
+    def jacobian(x, parts):
+        """d residual / d x.  Only a solution phase's own unknowns move its mu, so each column is a
+        finite difference of that one phase (not of the whole residual); the rest is linear and exact."""
+        jac = np.zeros((nrow, nvar))
+        for i, (kind, name, r, size) in enumerate(blocks):
+            c, r0, k0 = comp[i], row0[i], var0[i]
+            if kind == "pure":
+                jac[r0, gam0:gam0 + nc] = -c
+                jac[mass0:, k0] = c
+                continue
+            m = len(r.keep)
+            jac[r0:r0 + m, gam0:gam0 + nc] = -c
+            s_, mu, n = parts[i]
+            mass = n @ c
+            v = x[k0:k0 + size]
+            for j in range(size):
+                h = 1e-7 * max(1.0, abs(v[j]))
+                vp = v.copy()
+                vp[j] += h
+                part = ss_part(r, vp)
+                if part is None:
+                    vp[j] -= 2 * h
+                    part = ss_part(r, vp)
+                    if part is None:
+                        return None
+                    h = -h
+                jac[sum_row[i], k0 + j] = (part[0] - s_) / h
+                jac[r0:r0 + m, k0 + j] = (part[1] - mu) / h
+                jac[mass0:, k0 + j] = (part[2] @ c - mass) / h
+        if o2_mu is not None:
+            jac[o2_row, gam0 + jo] = 2.0
+            jac[mass0 + jo, nvar - 1] = 1.0
+        return jac
+
+    parts = []
+    f = residual(x, parts)
     if f is None:
         return None
     for _ in range(max_iter):
         if np.max(np.abs(f)) < 1e-7:
             break
-        jac = np.empty((len(f), nvar))
-        for j in range(nvar):
-            h = 1e-7 * max(1.0, abs(x[j]))
-            xp = x.copy()
-            xp[j] += h
-            fp = residual(xp)
-            if fp is None:
-                xp[j] -= 2 * h
-                fp = residual(xp)
-                if fp is None:
-                    return None
-                h = -h
-            jac[:, j] = (fp - f) / h
+        jac = jacobian(x, parts)
+        if jac is None:
+            return None
         try:
             dx = np.linalg.lstsq(jac, -f, rcond=None)[0]
         except np.linalg.LinAlgError:
             return None
         step, norm0 = 1.0, np.linalg.norm(f)
         while step > 1e-8:
-            fn = residual(x + step * dx)
+            new_parts = []
+            fn = residual(x + step * dx, new_parts)
             if fn is not None and np.linalg.norm(fn) < norm0:
                 break
             step *= 0.5
         else:
             return None
-        x, f = x + step * dx, fn
+        x, f, parts = x + step * dx, fn, new_parts
     if np.max(np.abs(f)) > 1e-5:
         return None
     parts, gam = unpack(x)
