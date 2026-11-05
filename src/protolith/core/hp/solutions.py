@@ -107,6 +107,10 @@ class HPSolution:
             for j, x in pw:
                 self._e[i, j] += x
         self._g0_cache = {}
+        self._tp_cache = {}
+        self._v = None if self.v is None else np.asarray(self.v, float)
+        self._vfac = None if self.v is None else 2.0 / (self._v[:, None] + self._v[None, :])
+        self._ones = np.ones(n)
 
     @property
     def names(self) -> tuple:
@@ -163,9 +167,38 @@ class HPSolution:
         phi, _, wstar, vt = self._wstar(prop, t, p)
         return float(0.5 * vt * phi @ wstar @ phi)
 
+    def _at(self, t: float, p: float):
+        """What mu needs at one T and P, computed once: g0, RT, W* (the van Laar scaled W) and its diagonal."""
+        key = (float(t), float(p))
+        c = self._tp_cache.get(key)
+        if c is None:
+            if len(self._tp_cache) > 512:
+                self._tp_cache.clear()
+            w = self.w_matrix(t, p)
+            if self._vfac is not None:
+                w = w * self._vfac
+            c = self._tp_cache[key] = (self.g0(t, p), R * float(t), w, np.diag(w).copy())
+        return c
+
     def mu(self, prop, t: float, p: float) -> np.ndarray:
-        """Chemical potentials of the end members, kJ/mol, at proportions prop (sum 1)."""
-        return self.g0(t, p) + R * t * self.ln_activity_ideal(prop) + self.mu_excess(prop, t, p)
+        """Chemical potentials of the end members, kJ/mol, at proportions prop (sum 1).
+
+        The same sums as g0 + RT ln a_ideal + mu_excess, arranged for speed (this is the solver's inner
+        loop): with q_k = e_k - phi, sum_ij q_ki W*_ij q_kj = W*_kk - 2 (W* phi)_k + phi . W* phi."""
+        prop = np.asarray(prop, float)
+        g0, rt, ws, diag = self._at(t, p)
+        sf = self._a @ prop
+        if len(self._num) == 0 and sf.min() > 0.0:
+            ln_a = self._lnk + self._e @ np.log(sf)
+        else:                     # a site at zero (ln a = -inf for the end members that need it), or ratios
+            ln_a = self.ln_activity_ideal(prop)
+        if self._v is None:
+            phi, scale = prop, self._ones
+        else:
+            scale = self._v
+            phi = prop * scale / (prop @ scale)
+        wphi = ws @ phi
+        return g0 + rt * ln_a - 0.5 * scale * (diag - 2.0 * wphi + phi @ wphi)
 
     def gibbs(self, prop, t: float, p: float) -> float:
         prop = np.asarray(prop, float)
@@ -174,6 +207,95 @@ class HPSolution:
     def compositions(self) -> np.ndarray:
         """(n_em, n_oxides) moles of oxides per end member."""
         return np.array([e.composition() for e in self.end_members])
+
+    def restricted(self, keep) -> "Restricted":
+        """This solution with only the end members `keep` (the others at zero), for the solver."""
+        return Restricted(self, np.asarray(keep, int))
+
+
+class Restricted:
+    """A solution phase with some end members left out (absent components).  mu(q) equals
+    HPSolution.mu of the full proportions (zeros elsewhere) at the kept end members, from smaller arrays:
+    a left-out end member adds nothing to the site fractions or to the excess terms of the others, and
+    a site that only left-out end members fill appears in none of the kept activities and is dropped."""
+
+    def __init__(self, s: HPSolution, keep: np.ndarray):
+        self.s, self.keep = s, keep
+        e = s._e[keep]
+        m_lin = s._a.shape[0]
+        sites = np.where(np.any(e != 0, axis=0))[0]          # linear sites first, then ratio sites
+        lin, rat = sites[sites < m_lin], sites[sites >= m_lin] - m_lin
+        self._a = s._a[lin][:, keep]
+        self._ratios = len(rat) > 0
+        self._num = s._num[rat][:, keep]
+        self._den = s._den[rat][:, keep]
+        self._e = e[:, sites]
+        self._lnk = s._lnk[keep]
+        self._v = None if s._v is None else s._v[keep]
+        self._ones = np.ones(len(keep))
+        self._cache = {}
+
+    def _at(self, t, p):
+        key = (float(t), float(p))
+        c = self._cache.get(key)
+        if c is None:
+            if len(self._cache) > 512:
+                self._cache.clear()
+            g0, rt, ws, diag = self.s._at(t, p)
+            k = self.keep
+            c = self._cache[key] = (g0[k], rt, ws[np.ix_(k, k)], diag[k])
+        return c
+
+    def _sf(self, q):
+        sf = self._a @ q
+        if self._ratios:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                sf = np.concatenate([sf, (self._num @ q) / (self._den @ q)])
+        return sf
+
+    def _excess(self, q, ws, diag):
+        if self._v is None:
+            phi, scale = q, self._ones
+        else:
+            scale = self._v
+            phi = q * scale / (q @ scale)
+        wphi = ws @ phi
+        return phi, scale, wphi, -0.5 * scale * (diag - 2.0 * wphi + phi @ wphi)
+
+    def mu(self, q, t: float, p: float) -> np.ndarray:
+        g0, rt, ws, diag = self._at(t, p)
+        sf = self._sf(q)
+        if sf.min() > 0.0:
+            ln_a = self._lnk + self._e @ np.log(sf)
+        else:                     # an empty site (or 0/0): ln a = -inf for the end members that need it
+            with np.errstate(divide="ignore", invalid="ignore"):
+                lsf = np.where(sf > 0, np.log(np.where(sf > 0, sf, 1.0)), -np.inf)
+                ln_a = self._lnk + np.where(self._e != 0, self._e * lsf, 0.0).sum(axis=1)
+        return g0 + rt * ln_a + self._excess(q, ws, diag)[3]
+
+    def mu_jacobian(self, q, t: float, p: float):
+        """(mu, d mu_k / d q_i) at q, or None on a site's edge.
+
+        Ideal part: d ln a_k / d q_i = sum_j e_kj (d sf_j / d q_i) / sf_j, with d sf / d q = A for a linear
+        site and (num_i - sf den_i) / (den . q) for a ratio site.  Excess part, with phi = q v / (q . v):
+        d mu_ex / d q = diag(v) (W* - 1 (W* phi)^T) d phi / d q, d phi_j / d q_i = v_i (d_ij - phi_j) / (q . v)
+        (v = 1 and phi = q for the symmetric form)."""
+        g0, rt, ws, diag = self._at(t, p)
+        sf = self._sf(q)
+        if not sf.min() > 0.0:
+            return None
+        dsf = self._a
+        if self._ratios:
+            r = sf[len(self._a):]
+            dsf = np.vstack([self._a, (self._num - r[:, None] * self._den) / (self._den @ q)[:, None]])
+        ln_a = self._lnk + self._e @ np.log(sf)
+        phi, scale, wphi, ex = self._excess(q, ws, diag)
+        mu = g0 + rt * ln_a + ex
+        d_ex = ws - wphi[None, :]
+        if self._v is not None:
+            qv = q @ scale
+            d_ex = d_ex @ ((np.eye(len(q)) - phi[:, None]) * (scale / qv)[None, :])
+        return mu, rt * ((self._e / sf) @ dsf) + scale[:, None] * d_ex
 
 
 def A(k=1.0, **powers):
