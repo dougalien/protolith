@@ -96,14 +96,14 @@ NOTES = [
     "solution models of White et al. (2014) for metapelites (ds6.2) or Holland, Green and Powell (2018) for "
     "the igneous set (ds6.36).",
     "The metapelite set matches MAGEMin's own reference grid at all 48 of its points (assemblage and Gibbs energy).",
-    "Each cell of the diagram is one equilibrium at its centre. Boundaries are drawn along cell edges, so "
+    "Each cell of the diagram is one equilibrium at its center. Boundaries are drawn along cell edges, so "
     "they are stepped; a finer grid moves them closer to the true reaction lines.",
     "Fields are shaded by variance, F = C - phases + 2: the darker the field, the more degrees of freedom.",
     "Modes are wt% of the rock without its free fluid. With water in excess, the amount of fluid means nothing.",
     "A P-T path solves points spaced evenly along its line. The facies fields behind it are schematic, after "
     "Spear (1993) and Winter (2010); the Al2SiO5 and muscovite + quartz lines are worked out from ds6.2.",
-    "Oxides the phase set cannot use (Cr2O3 for metapelites, MnO for the igneous set, and P2O5, CO2, NiO) "
-    "are left out and listed.",
+    "Oxides the phase set cannot use (Cr2O3 for metapelites, MnO for the igneous set, and NiO, CoO, P2O5 "
+    "and CO2 for both) are left out and listed.",
 ]
 
 
@@ -187,13 +187,21 @@ def point_json(pt: Point, c: int) -> dict:
             "traces": [m.abbr for m in pt.traces]}
 
 
+def _modes(pt) -> dict:
+    """wt% by mineral; two coexisting phases with one name (two amphiboles, say) are added together."""
+    out: dict[str, float] = {}
+    for m in pt.minerals:
+        out[m.abbr] = out.get(m.abbr, 0.0) + m.mode
+    return {k: round(v, 2) for k, v in out.items()}
+
+
 def grid_json(ps: pseudosection.Pseudosection, done: list) -> dict:
     """The diagram for the windows: cells by field (None where the row is still running, -1 where the
     solver failed), the fields, their boundaries, and each cell's modes for shading."""
     cells, modes = [], []
     for i, row in enumerate(ps.points):
         cells.append([ps.field_of[i][j] if done[i] else None for j in range(len(ps.t_c))])
-        modes.append([{m.abbr: round(m.mode, 2) for m in pt.minerals} if pt is not None else None for pt in row])
+        modes.append([_modes(pt) if pt is not None else None for pt in row])
     minerals = sorted({a for row in modes for c in row if c for a in c}, key=lambda a: names.ORDER.get(a, 99))
     return {"t_c": ps.t_c, "p_kbar": ps.p_kbar, "cells": cells, "modes": modes, "minerals": minerals,
             "fields": [{"id": f.id, "label": f.label, "variance": f.variance, "n": len(f.cells),
@@ -213,7 +221,7 @@ def path_json(tp: list, pts: list, done: list, c: int) -> dict:
         else:
             rows.append({"t_c": t, "p_kbar": p, "state": "done", "label": pt.label, "assemblage": list(pt.assemblage),
                          "variance": c - len(pt.assemblage) + 2,
-                         "modes": {m.abbr: round(m.mode, 2) for m in pt.minerals}})
+                         "modes": _modes(pt)})
     minerals = sorted({a for r in rows for a in r.get("modes", {})}, key=lambda a: names.ORDER.get(a, 99))
     return {"points": rows, "minerals": minerals, "done": done}
 

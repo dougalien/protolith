@@ -8,4 +8,4 @@ at a time or over a T-P grid (a pseudosection), on Protolith's Holland & Powell 
 The bulk can come from a ``.sample`` file and any point can go back out as one
 (``protolith.metamorphism_link``).  This package imports the core only, never Magma or Reaction.
 """
-__version__ = "0.0.1"
+__version__ = "0.1.0"
