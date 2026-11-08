@@ -95,8 +95,17 @@ def label(assemblage) -> str:
     return " ".join(out)
 
 
+# the fixed formulas of the pure phases
+PURE_FORMULA = {"q": "SiO2", "crst": "SiO2", "trd": "SiO2", "coe": "SiO2", "stv": "SiO2", "ky": "Al2SiO5",
+                "sill": "Al2SiO5", "and": "Al2SiO5", "ru": "TiO2", "sph": "CaTiSiO5", "cor": "Al2O3",
+                "ne": "NaAlSiO4", "zo": "Ca2Al3Si3O12(OH)", "fl": "H2O", "H2O": "H2O"}
+
+
 def formula(hp: str, c: np.ndarray) -> str:
-    """Cations per OXYGENS[hp] anhydrous oxygens, e.g. Ca0.85Mg0.90Fe0.21Al0.08Si1.96O6."""
+    """Cations per OXYGENS[hp] anhydrous oxygens, e.g. Ca0.85Mg0.90Fe0.21Al0.08Si1.96O6; a pure phase's
+    own formula."""
+    if hp in PURE_FORMULA:
+        return PURE_FORMULA[hp]
     if hp not in OXYGENS:
         return ""
     fe3 = 2.0 * max(c[_I["O"]], 0.0)

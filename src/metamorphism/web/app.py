@@ -23,18 +23,44 @@ from .. import __version__
 from .. import bulk as bulk_mod
 from .. import facies
 from ..app.server import CARDS, NOTES, OXIDES, SOURCES, SYSTEM_LABEL, State
+from ..names import MINERALS
+from .chem import chem_text
 
 FEEDBACK_URL = "https://github.com/dougalien/protolith/issues"
 PATHS = {"input": "./", "results": "./results"}
 WORKSPACE_TTL = 12 * 3600
 STATIC = Path(__file__).resolve().parents[1] / "app" / "static"
 ICON = str(STATIC / "protolith_512.png")
-PALETTE = ["#3E5C6B", "#B4532A", "#C49A55", "#5E8C6A", "#8A6A9A", "#4F86A0", "#A8644A", "#6B6F45",
-           "#7A8F99", "#C77B5A", "#9DA36A", "#5B4E7A"]
+PALETTE = ["#3E5C6B", "#B4532A", "#E0B95B", "#5E8C6A", "#8A6A9A", "#7FB3D5", "#6B6F45", "#D9A3B8",
+           "#555B5E", "#2E8B8B", "#7A4E2D", "#B9C27A"]   # twelve hues far enough apart to tell stacked bands
 BG, GRID = "#F3F1EB", "#DDD8CC"
 STRIPE = ("linear-gradient(90deg, #D6B27C 0 22%, #3E5C6B 22% 34%, #D6B27C 34% 62%, #B4532A 62% 70%, "
           "#D6B27C 70% 88%, #3E5C6B 88% 100%)")
 KINDS = {"path": "A P-T path", "grid": "A pseudosection (T-P grid)", "point": "One temperature and pressure"}
+HEADS = {"path": "a P-T path", "grid": "a pseudosection (T-P grid)", "point": "one temperature and pressure"}
+LINE_NAMES = {"Ky = And": "kyanite = andalusite", "Ky = Sil": "kyanite = sillimanite",
+              "And = Sil": "andalusite = sillimanite",
+              "Ms + Qz = Kfs + Als + H2O": "muscovite + quartz = K-feldspar + Al₂SiO₅ + H₂O"}
+
+
+def mineral(abbr: str) -> str:
+    """'garnet (Grt)'; water stays plain H₂O."""
+    if abbr == "H2O":
+        return "H₂O"
+    name = MINERALS.get(abbr)
+    return f"{name} ({abbr})" if name else abbr
+
+
+def key_caption(abbrs) -> None:
+    """One line naming every abbreviation shown, in assemblage order."""
+    seen = sorted({a for a in abbrs if a in MINERALS and a != "H2O"}, key=list(MINERALS).index)
+    if seen:
+        st.caption("Key: " + " · ".join(f"{a} {MINERALS[a]}" for a in seen) + " · H₂O free fluid")
+
+
+def chem_label(label: str) -> str:
+    """An assemblage label such as 'Bt Ms Qz H2O' with its water written H₂O."""
+    return " ".join(chem_text(w) for w in str(label).split(" "))
 
 
 # ---- workspaces: one State per user, shared by that user's two windows -------------------------------
@@ -90,7 +116,7 @@ def header(subtitle: str) -> None:
 
 def footer() -> None:
     st.divider()
-    st.caption(f"Protolith {__version__} · alpha · [Report a problem]({FEEDBACK_URL}) · Metamorphism on the "
+    st.caption(f"Protolith {__version__} · beta · [Report a problem]({FEEDBACK_URL}) · Metamorphism on the "
                "Holland and Powell data; every number comes from Protolith's own solver.")
 
 
@@ -106,6 +132,7 @@ def _set_rock(name: str) -> None:
 def _apply_card(c: dict) -> None:
     ss = st.session_state
     _set_rock(c["rock"])
+    ss["rock-pick"] = c["rock"]           # the Rock box has its own state; without this it puts the old rock back
     ss["system"], ss["water"], ss["kind"] = c["system"], c["water"], c["kind"]
     if c["kind"] == "path":
         ss["path_text"] = "\n".join(f"{t:g}, {p:g}" for t, p in c["path"])
@@ -181,8 +208,8 @@ def input_page() -> None:
         st.markdown("**The rock**")
         rocks = list(bulk_mod.PRESETS)
         a, b = st.columns([2, 1])
-        pick = a.selectbox("Rock", rocks, index=rocks.index(st.session_state.get("rock", rocks[0])),
-                           key="rock-pick", disabled=running)
+        st.session_state.setdefault("rock-pick", st.session_state.get("rock", rocks[0]))
+        pick = a.selectbox("Rock", rocks, key="rock-pick", disabled=running)
         if pick != st.session_state.get("rock"):
             _set_rock(pick)
             st.rerun()
@@ -191,11 +218,12 @@ def input_page() -> None:
         st.caption("Oxides, wt%")
         cols = st.columns(4)
         for k, ox in enumerate(OXIDES):
-            cols[k % 4].number_input(ox, min_value=0.0, max_value=100.0, step=0.1, format="%.2f", key=f"ox-{ox}",
+            cols[k % 4].number_input(chem_text(ox), min_value=0.0, max_value=100.0, step=0.1, format="%.2f", key=f"ox-{ox}",
                                      disabled=running)
         total = sum(st.session_state[f"ox-{ox}"] for ox in OXIDES)
-        st.caption(f"Total {total:.2f} wt% (normalized for the run). Left out by the "
-                   f"{st.session_state.get('system') or 'metapelite'} set: {', '.join(bulk_mod.LEFT_OUT[st.session_state.get('system') or 'metapelite'])}.")
+        system = st.session_state.get("system") or "metapelite"
+        st.caption(f"Total {total:.2f} wt% (normalized for the run). Left out by the {system} set: "
+                   f"{', '.join(chem_text(ox) for ox in bulk_mod.LEFT_OUT[system])}.")
 
     with right.container(border=True):
         st.markdown("**Minerals and water**")
@@ -204,7 +232,7 @@ def input_page() -> None:
         st.segmented_control("Water", ["excess", "bulk"], key="water", disabled=running,
                              format_func={"excess": "In excess", "bulk": "The rock's own"}.get)
         st.caption("In excess: a free fluid at every point, as usual for prograde metamorphism. The rock's own: "
-                   "only the H2O in the analysis, so the rock can be short of water.")
+                   "only the H₂O in the analysis, so the rock can be short of water.")
     with right.container(border=True):
         st.markdown("**The run**")
         st.segmented_control("Kind", list(KINDS), format_func=KINDS.get, key="kind", disabled=running)
@@ -215,19 +243,19 @@ def input_page() -> None:
             st.number_input("Points along the path", min_value=2, max_value=60, step=1, key="n", disabled=running)
         elif kind == "grid":
             a, b, c = st.columns(3)
-            a.number_input("T from (°C)", key="t0", step=10.0, disabled=running)
-            b.number_input("T to (°C)", key="t1", step=10.0, disabled=running)
-            c.number_input("T step", key="ts", min_value=1.0, step=5.0, disabled=running)
-            a.number_input("P from (kbar)", key="p0", step=0.5, disabled=running)
-            b.number_input("P to (kbar)", key="p1", step=0.5, disabled=running)
-            c.number_input("P step", key="ps", min_value=0.1, step=0.5, disabled=running)
+            a.number_input("T from (°C)", key="t0", step=10.0, format="%g", disabled=running)
+            b.number_input("T to (°C)", key="t1", step=10.0, format="%g", disabled=running)
+            c.number_input("T step (°C)", key="ts", min_value=1.0, step=5.0, format="%g", disabled=running)
+            a.number_input("P from (kbar)", key="p0", step=0.5, format="%g", disabled=running)
+            b.number_input("P to (kbar)", key="p1", step=0.5, format="%g", disabled=running)
+            c.number_input("P step (kbar)", key="ps", min_value=0.1, step=0.5, format="%g", disabled=running)
             nt = int((st.session_state["t1"] - st.session_state["t0"]) // max(st.session_state["ts"], 1e-9)) + 1
             np_ = int((st.session_state["p1"] - st.session_state["p0"]) // max(st.session_state["ps"], 1e-9)) + 1
-            st.caption(f"{nt} x {np_} = {nt * np_} points, a few seconds each.")
+            st.caption(f"{nt} × {np_} = {nt * np_} points, a few seconds each.")
         else:
             a, b = st.columns(2)
-            a.number_input("Temperature (°C)", key="t", step=10.0, disabled=running)
-            b.number_input("Pressure (kbar)", key="p", step=0.5, disabled=running)
+            a.number_input("Temperature (°C)", key="t", step=10.0, format="%g", disabled=running)
+            b.number_input("Pressure (kbar)", key="p", step=0.5, format="%g", disabled=running)
 
         a, b = st.columns(2)
         if a.button("Run", type="primary", width="stretch", disabled=running):
@@ -271,12 +299,13 @@ def _facies_plot(path: dict) -> go.Figure:
                            font=dict(size=10, color="#8a8370"))
     for ln in d["lines"]:
         fig.add_scatter(x=[p[0] for p in ln["points"]], y=[p[1] for p in ln["points"]], mode="lines",
-                        line=dict(color="#7A8F99", width=1, dash="dot"), name=ln["label"], hoverinfo="name")
+                        line=dict(color="#7A8F99", width=1, dash="dot"), name=LINE_NAMES.get(ln["label"], ln["label"]),
+                        hoverinfo="name")
     pts = path["points"]
     fig.add_scatter(x=[p["t_c"] for p in pts], y=[p["p_kbar"] for p in pts], mode="lines+markers", name="Path",
                     line=dict(color="#B4532A", width=2.5),
                     marker=dict(size=8, color=["#B4532A" if p["state"] == "done" else "#cccccc" for p in pts]),
-                    text=[p.get("label", p["state"]) for p in pts],
+                    text=[chem_label(p.get("label", p["state"])) for p in pts],
                     hovertemplate="%{x:.0f} °C, %{y:.2f} kbar<br>%{text}<extra></extra>")
     return fig
 
@@ -285,8 +314,8 @@ def _modes_plot(path: dict) -> go.Figure:
     pts = [p for p in path["points"] if p["state"] == "done"]
     fig = _fig("temperature along the path, °C", "wt% of the rock", height=440)
     for m in path["minerals"]:
-        fig.add_scatter(x=[p["t_c"] for p in pts], y=[p["modes"].get(m, 0) for p in pts], name=m, mode="lines",
-                        stackgroup="one", hovertemplate=m + " %{y:.1f}%<extra></extra>")
+        fig.add_scatter(x=[p["t_c"] for p in pts], y=[p["modes"].get(m, 0) for p in pts], name=mineral(m),
+                        mode="lines", stackgroup="one", hovertemplate=mineral(m) + " %{y:.1f}%<extra></extra>")
     return fig
 
 
@@ -299,7 +328,8 @@ def _in_out(path: dict) -> list[str]:
         if prev is not None:
             came, went = sorted(cur - prev), sorted(prev - cur)
             if came or went:
-                bits = ([f"**{', '.join(came)}** in"] if came else []) + ([f"{', '.join(went)} out"] if went else [])
+                bits = ([f"**{', '.join(map(mineral, came))}** in"] if came else []) + \
+                       ([f"{', '.join(map(mineral, went))} out"] if went else [])
                 out.append(f"{p['t_c']:.0f} °C, {p['p_kbar']:.1f} kbar: " + "; ".join(bits))
         prev = cur
     return out
@@ -308,16 +338,15 @@ def _in_out(path: dict) -> list[str]:
 def _grid_plot(grid: dict) -> go.Figure:
     t, p, cells = grid["t_c"], grid["p_kbar"], grid["cells"]
     var = {f["id"]: f["variance"] for f in grid["fields"]}
-    lab = {f["id"]: f["label"] for f in grid["fields"]}
+    lab = {f["id"]: f"field {f['id'] + 1}: {chem_label(f['label'])}" for f in grid["fields"]}
     z = [[(var.get(c) if c is not None and c >= 0 else None) for c in row] for row in cells]
     text = [[(lab.get(c, "failed") if c is not None else "running") for c in row] for row in cells]
     fig = _fig("temperature, °C", "pressure, kbar", height=600)
     fig.add_heatmap(x=t, y=p, z=z, text=text, colorscale=[[0, "#F3EBDD"], [1, "#9FB0B8"]], showscale=True,
-                    colorbar=dict(title="variance"), hovertemplate="%{x:.0f} °C, %{y:.2f} kbar<br>%{text}<extra></extra>")
-    for f in grid["fields"]:
-        if f["n"] >= 2:
-            fig.add_annotation(x=f["centre"][0], y=f["centre"][1], text=str(f["id"]), showarrow=False,
-                               font=dict(size=11, color="#2B3134"))
+                    colorbar=dict(title="variance", dtick=1, tickformat="d"), hovertemplate="%{x:.0f} °C, %{y:.2f} kbar<br>%{text}<extra></extra>")
+    for f in grid["fields"]:          # every field numbered, as in the table below
+        fig.add_annotation(x=f["centre"][0], y=f["centre"][1], text=str(f["id"] + 1), showarrow=False,
+                           font=dict(size=11, color="#2B3134"))
     for (a, b), (c, d) in grid["boundaries"]:
         fig.add_scatter(x=[a, c], y=[b, d], mode="lines", line=dict(color="#3E5C6B", width=1.2),
                         hoverinfo="skip", showlegend=False)
@@ -326,7 +355,7 @@ def _grid_plot(grid: dict) -> go.Figure:
 
 def _point_table(pt: dict) -> None:
     rows = [{"mineral": m["abbr"], "name": m["name"], "wt% of rock": round(m["mode"], 2),
-             "formula": m["formula"]} for m in pt["minerals"]]
+             "formula": chem_text(m["formula"])} for m in pt["minerals"]]
     st.dataframe(rows, hide_index=True, width="stretch")
     if pt.get("fluid"):
         st.caption(f"Free fluid: {pt['fluid']['grams']:.2f} g per 100 g of rock (not counted in the modes).")
@@ -347,7 +376,7 @@ def _csv(snap: dict) -> str:
         for i, pr in enumerate(g["p_kbar"]):
             for j, tc in enumerate(g["t_c"]):
                 c = g["cells"][i][j]
-                w.writerow([tc, pr, c, lab.get(c, "")])
+                w.writerow([tc, pr, "" if c is None or c < 0 else c + 1, lab.get(c, "")])
     elif snap["point"]:
         w.writerow(["mineral", "name", "wt_pct_of_rock", "formula"])
         for m in snap["point"]["minerals"]:
@@ -370,10 +399,11 @@ def results_page() -> None:
         return
     b = snap["bulk"]
     kind = snap["run"]["kind"]
-    st.subheader(f"{b['name']}: {KINDS[kind].lower()}")
+    name = str(b["name"])
+    st.subheader(f"{name[:1].upper() + name[1:]}: {HEADS[kind]}")
     st.caption(f"{b['system_label']} · water {'in excess' if b['water'] == 'excess' else 'from the rock'} · "
                f"{b['components']} components · run {snap['run_id']}"
-               + (f" · left out: {', '.join(b['left_out'])}" if b["left_out"] else ""))
+               + (f" · left out: {', '.join(chem_text(ox) for ox in b['left_out'])}" if b["left_out"] else ""))
     done, n = snap["progress"]
     if snap["status"] == "running":
         st.progress(done / n if n else 0.0, text=f"Running: {done} of {n} · {snap['elapsed']:.0f} s")
@@ -390,22 +420,24 @@ def results_page() -> None:
             for c in changes or ["No change in the assemblage along the path so far."]:
                 st.markdown(c)
         st.plotly_chart(_facies_plot(path), width="stretch")
-        st.caption("Facies fields are schematic, after Spear (1993) and Winter (2010); the Al2SiO5 and muscovite + "
+        st.caption("Facies fields are schematic, after Spear (1993) and Winter (2010); the Al₂SiO₅ and muscovite + "
                    "quartz lines are worked out from ds6.2.")
         if path["minerals"]:
             st.markdown("**Modes along the path**")
             st.plotly_chart(_modes_plot(path), width="stretch")
+        key_caption(m for p in path["points"] if p["state"] == "done" for m in p["assemblage"])
         pick = [k for k, p in enumerate(path["points"]) if p["state"] == "done"]
     elif kind == "grid" and snap["grid"]:
         g = snap["grid"]
         st.plotly_chart(_grid_plot(g), width="stretch")
         st.caption("Each cell is one equilibrium; fields are shaded by variance (darker, more degrees of freedom).")
-        st.dataframe([{"field": f["id"], "assemblage": f["label"], "variance": f["variance"], "cells": f["n"]}
-                      for f in g["fields"]], hide_index=True, width="stretch")
+        st.dataframe([{"field": f["id"] + 1, "assemblage": chem_label(f["label"]), "variance": f["variance"],
+                       "cells": f["n"]} for f in g["fields"]], hide_index=True, width="stretch")
+        key_caption(a for f in g["fields"] for a in str(f["label"]).split(" "))
         pick = []
     elif kind == "point" and snap["point"]:
         pt = snap["point"]
-        st.markdown(f"**{pt['label']}** at {pt['t_c']:.0f} °C and {pt['p_kbar']:.2f} kbar · variance {pt['variance']}")
+        st.markdown(f"**{chem_label(pt['label'])}** at {pt['t_c']:.0f} °C and {pt['p_kbar']:.2f} kbar · variance {pt['variance']}")
         _point_table(pt)
         pick = [0]
     else:
@@ -425,5 +457,5 @@ def results_page() -> None:
                                   file_name=f"protolith_{smp.conditions['t_c']:.0f}C.sample", mime="application/json")
     with st.expander("Notes on the models"):
         for t in snap["notes"]:
-            st.markdown(f"- {t}")
+            st.markdown(f"- {chem_text(t)}")
     footer()
