@@ -1,5 +1,4 @@
-"""``python -m metamorphism.app`` (or Protolith.exe) starts Protolith, the Metamorphism module's local server on its own and opens the control window.
-Inside Protolith (``python -m protolith.app``) the shell starts it with the other modules."""
+"""``python -m metamorphism.app`` (or Protolith.exe) starts Protolith's local server and opens the control window."""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +9,7 @@ import threading
 import webbrowser
 
 # One thread for numpy's linear algebra in this process and in the grid's worker processes (see
-# magma.app.__main__).  Set before numpy loads.
+# the solver's matrices are small).  Set before numpy loads.
 for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_v, "1")
 

@@ -123,8 +123,7 @@ def test_a_small_pseudosection_end_to_end(server):
                                      "p": 6, "from_sample": True})[0] == 200
     assert wait(st) == "done", st.message
     assert json.loads(call(server, "/api/sample")[1])["parent"] == smp["id"]
-    assert json.loads(call(server, "/api/state")[1])["can_send"] is False
-    assert call(server, "/api/send-sample", {"i": 0, "j": 0})[0] == 404       # Reaction lives in Protolith
+    assert call(server, "/api/send-sample", {"i": 0, "j": 0})[0] == 404
 
 
 def test_stop_ends_the_worker_processes():

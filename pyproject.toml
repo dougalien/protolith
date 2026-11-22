@@ -5,28 +5,24 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "protolith"
 version = "0.1.0"
-description = "Open geochemical calculator: melting and crystallization, metamorphism, and water-rock reaction on shared thermodynamic data"
+description = "Metamorphic phase equilibria (points, P-T paths and pseudosections) on the Holland and Powell data"
 requires-python = ">=3.10"
+license = {text = "GPL-3.0-or-later"}
+classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
 dependencies = ["numpy>=1.24", "scipy>=1.10"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "matplotlib>=3.6", "pandas>=2.0"]
 
 [project.scripts]
-magma = "magma.app.__main__:main"
-reaction-app = "reaction.app.__main__:main"
-protolith = "protolith.app.__main__:main"
+protolith = "metamorphism.app.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"magma.data" = ["*.tsv"]
 "protolith.core.data" = ["*.tsv"]
-"magma.app" = ["static/*"]
-"reaction.app" = ["static/*"]
-"protolith.app" = ["static/*"]
-"reaction" = ["data/*.tsv", "data/reference/*.md", "data/reference/OBIGT/*.csv", "data/reference/OBIGT/Berman/*.csv"]
+"metamorphism.app" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -6,6 +6,6 @@ at a time or over a T-P grid (a pseudosection), on Protolith's Holland & Powell 
 - ``pseudosection``: a T-P grid of points, grouped into assemblage fields with their boundaries.
 
 The bulk can come from a ``.sample`` file and any point can go back out as one
-(``protolith.metamorphism_link``).  This package imports the core only, never Magma or Reaction.
+(``protolith.metamorphism_link``).  This package imports only the core.
 """
 __version__ = "0.1.0"

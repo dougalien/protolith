@@ -115,7 +115,8 @@ def to_wt_pct(moles: np.ndarray) -> dict[str, float]:
 # Starting rocks for trying the module out.  "pelite" and "metabasite" are rounded, typical compositions
 # (not a published analysis): a shale-derived pelite and a MORB-like basalt, each with the water of a
 # hydrated protolith.  "world median pelite" is Forshaw and Pattison (2023), the default bulk of MAGEMin's
-# metapelite set, here as wt% from its moles (with the Fe2O3 of its O and without its excess water).
+# metapelite set, here as wt% from its moles (with the Fe2O3 of its O, and the 5 mol H2O of MAGEMin's
+# water-undersaturated version, test 1, in place of the 30 mol of water in excess).
 # "aluminous pelite" is rounded too: an Al- and Fe-rich, Ca-poor mudstone, the kind that grows
 # chloritoid and staurolite.
 PRESETS = {

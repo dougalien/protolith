@@ -46,7 +46,7 @@ def test_mu_is_derivative_of_g(name):
     n0 = _mix(s)
     assert np.all(s.constraints @ n0 >= 0)
     mu = s.mu(n0, T, P)
-    # feldspar's Al-avoidance activities and the simplified spinel of White et al. (2002) are not one
+    # feldspar's Al-avoidance activities and the simplified spinel of the set are not one
     # entropy's derivative (MAGEMin uses them as they are), so only their excess terms are held to this
     exact = name not in ("fsp", "sp")
     if not exact:

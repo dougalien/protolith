@@ -1,6 +1,6 @@
 "use strict";
 // Metamorphism's results window: the pseudosection (fields, boundaries, labels), shading by variance or by
-// a mineral's mode, and the minerals of the cell you click, with Save sample and Send to Reaction.
+// a mineral's mode, and the minerals of the cell you click, with Save sample.
 
 const $ = (id) => document.getElementById(id);
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -436,7 +436,6 @@ function show(st) {
   $("path-panel").hidden = !path;
   $("dl-ps").disabled = !grid || st.status !== "done";
   $("ps-panel").hidden = !grid;
-  $("send-box").hidden = !st.can_send;
   if (path) {
     const key = `${st.run_id}:${st.progress[0]}:${st.status}`;
     if (key !== drawKey) {
@@ -468,17 +467,5 @@ $("dl-sample").addEventListener("click", () => {
   if (!SEL) return;
   const a = h("a", { href: `/api/sample?i=${SEL.i}&j=${SEL.j}&fluid=${$("smp-fluid").checked ? 1 : 0}`, download: "" });
   document.body.append(a); a.click(); a.remove();
-});
-// Inside Protolith: the rock (without its free water) goes onto Reaction's card as minerals, at the grams
-// in the box per kg of water, and Reaction's window comes forward.
-$("send-sample").addEventListener("click", async () => {
-  const g = parseFloat($("send-g").value);
-  if (!(g > 0)) { $("send-g").reportValidity(); return; }
-  if (!SEL) return;
-  const reply = await api("/api/send-sample", { i: SEL.i, j: SEL.j, grams: g });
-  if (reply.error) { $("smp-note").textContent = reply.error; return; }
-  const lines = [...(reply.problems || []), ...(reply.notes || [])];
-  $("smp-note").textContent = lines.length ? `Sent to Reaction: ${lines.join("; ")}.` : "On Reaction's card. Press Run there.";
-  if (reply.open) window.open(reply.open, "protolith-reaction");
 });
 connect(show, (ok) => { $("pill-link").textContent = ok ? "connected" : "not connected"; $("pill-link").className = `pill ${ok ? "ok" : "bad"}`; });

@@ -1,7 +1,7 @@
 # Holland & Powell end-member dataset ds62 (Holland and Powell 2011, J. Metamorphic Geol. 29,
 # 333-383), the dataset of the metapelite set of White et al. (2014); numbers as distributed in MAGEMin
-# (src/TC_database/TC_endmembers.c), written by scripts/extract_hp_dataset.py, taken at Douglas's
-# request 2026-11-03.  Units and columns as in hp_ds636.tsv.
+# (src/TC_database/TC_endmembers.c), written by scripts/extract_hp_dataset.py.  Units and columns as
+# in hp_ds636.tsv.
 name	SiO2	Al2O3	CaO	MgO	FeO	K2O	Na2O	TiO2	O	MnO	Cr2O3	H2O	CO2	Sel	Cl	atoms	H	S	V	a	b	c	d	alpha0	kappa0	kappa0p	kappa0pp	od	od1	od2	od3	od4	od5	od6
 wu	0.0	0.0	0.0	0.0	1.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	2.0	-262.44	0.063	1.206	0.0674	3.758e-06	315.7	-0.3817	3.22e-05	1520.0	4.0	-0.0032	0.0	0.0	0.0	0.0	0.0	0.0	0.0
 fo	1.0	0.0	0.0	2.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	7.0	-2172.59	0.0951	4.366	0.2333	1.494e-06	-603.8	-1.8697	2.85e-05	1285.0	3.84	-0.003	0.0	0.0	0.0	0.0	0.0	0.0	0.0

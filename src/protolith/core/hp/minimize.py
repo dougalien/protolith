@@ -25,7 +25,7 @@ from .endmembers import DATASETS, OXIDES, R, gibbs
 from .solutions import SOLUTIONS, HPSolution
 from .solutions_mp import SOLUTIONS_MP
 
-# MnO is last so that the first eleven keep the places they had before it was added (2026-11-03)
+# MnO is last, so a bulk written with the first eleven components keeps its places
 COMPONENTS = ("SiO2", "Al2O3", "CaO", "MgO", "FeO", "K2O", "Na2O", "TiO2", "O", "Cr2O3", "H2O", "MnO")
 _IDX = [OXIDES.index(o) for o in COMPONENTS]
 
@@ -293,7 +293,7 @@ def equilibrate(bulk, t_k: float, p_kbar: float, phases=None, max_iter: int = 12
     force does the full search run, starting from its compositions.
     """
     bulk = np.asarray(bulk, float).copy()
-    if len(bulk) < len(COMPONENTS):                 # a bulk written before MnO was added: no MnO
+    if len(bulk) < len(COMPONENTS):                 # a bulk of the first eleven components: no MnO
         bulk = np.concatenate([bulk, np.zeros(len(COMPONENTS) - len(bulk))])
     # a component below TRACE of the bulk (a few ppm) is dropped: the starting columns of a solution
     # always carry some of each of their components, so a trace one would make mass balance impossible

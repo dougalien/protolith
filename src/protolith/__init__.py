@@ -1,8 +1,7 @@
-"""Protolith: one geochemical calculator for melting and crystallization (Magma), water-rock reaction
-(Reaction), and later metamorphism and surface processes, on shared thermodynamic data.
+"""Protolith: metamorphic phase equilibria on the Holland and Powell thermodynamic data.
 
-This package holds what the modules share: the thermodynamic core (``core``, the Holland & Powell
-dataset, solution models and solver), the sample file (``sample``), the links from Magma results
-(``magma_link``) to Reaction's reactant card (``reaction_link``), and the shell (``app``).
+This package holds the thermodynamic core (``core``: the Holland & Powell datasets, solution models and
+solver), the sample file (``sample``) and the link between samples and the metamorphism module
+(``metamorphism_link``).  The calculations and windows are in the ``metamorphism`` package.
 """
 __version__ = "0.1.0"

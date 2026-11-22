@@ -1,99 +1,66 @@
 # Protolith
 
-An open geochemical calculator: melting and crystallization of magma, water-rock reaction, and later
-metamorphism and surface processes, on shared thermodynamic data. Each module stands alone; a **sample**
-(a rock and/or fluid at a stated T and P) carries the result of one module into the next.
+Protolith finds the stable mineral assemblage of a rock at a given temperature and pressure: at one
+point, along a P-T path, or over a T-P grid (a pseudosection). It minimizes the Gibbs energy of the rock
+on the Holland and Powell (2011) thermodynamic dataset, with two sets of solution models:
 
-Protolith is built from copies of the two existing apps. **Magma and Reaction themselves are not
-changed**: they keep their own folders, repositories and exes. Where each copy came from is in
-[docs/ORIGINS.md](docs/ORIGINS.md).
+* **metapelite**: White et al. (2014) on ds6.2, in MnNCKFMASHTO (garnet, staurolite, chloritoid,
+  cordierite, the micas, chlorite, melt and the rest);
+* **igneous**: Holland, Green and Powell (2018) on ds6.36, for basalts and other mafic rocks.
 
-Plan: [Linking Magma and Reaction: feasibility and architecture](https://claude.ai/artifact/KqQF2Kz2euZdrhDm1zK1TG)
+The parameter values are those distributed in MAGEMin (Riel et al. 2022). The metapelite set reproduces
+MAGEMin's own reference grid for its world median pelite at all 48 points (assemblage, and system Gibbs
+energy within 0.0005 kJ/mol). The design notes are in [docs/metamorphism/DESIGN.md](docs/metamorphism/DESIGN.md).
+
+## Using it
+
+On the web, Protolith has two windows: **Input** (a rock from a card, a preset or typed oxides; the phase
+set; water from the rock or in excess; one point, a P-T path or a grid) and **Results** (the assemblage,
+modes and compositions, the path on a facies diagram, or the pseudosection). Both follow one run, so the
+Results window can sit on a second screen. Runs can be saved as CSV, and any point as a `.sample` file.
+
+To run it yourself:
+
+    pip install -r requirements.txt
+    streamlit run streamlit_app.py
+
+The same two windows also run as a local desktop app (`python -m metamorphism.app`), and the
+calculations run from the command line (`python -m metamorphism point ...` or `grid ...`).
 
 ## Layout
 
 | Path | What it is |
 | --- | --- |
-| `src/magma/` | the Magma module (melting, crystallization; Holland & Powell and MELTS engines) |
-| `src/reaction/` | the Reaction module (speciation, reaction paths, kinetics, transport) |
-| `src/protolith/core/` | the shared thermodynamic core: the Holland & Powell dataset, solution models and solver (no user interface) |
-| `src/protolith/` | shared code: the core, the sample file and the links between modules |
-| `src/protolith/app/` | the shell: the home window, and every module running in one program |
-| `tests/core/`, `tests/magma/`, `tests/reaction/`, `tests/protolith/` | the core's tests, each module's own tests, plus the link tests |
-| `docs/magma/`, `docs/reaction/` | each module's own design notes and README |
-| `packaging/protolith/` | the build of Protolith.exe (one file with every module) |
-| `packaging/magma/`, `packaging/reaction/` | the original exe builds, kept for reference |
+| `src/metamorphism/` | the calculations (bulk, point, path, pseudosection, mineral names, facies background) and the two windows (`web/` for Streamlit, `app/` for the desktop) |
+| `src/protolith/core/` | the Holland & Powell core: end-member datasets, solution models and the minimizer (no user interface) |
+| `src/protolith/sample.py` | the `.sample` file (a rock's conditions, bulk and phases, as JSON) |
+| `scripts/` | how the data were produced: `extract_hp_dataset.py` and `port_magemin_mp.py` read MAGEMin's sources; `compare_mp_magemin.py` runs MAGEMin's 48-point reference grid |
+| `tests/` | the core's tests, the module's tests and the sample file's tests |
+| `packaging/protolith/` | the Windows exe build and the icon |
 
-## The shared core
+## Tests
 
-`protolith.core.hp` is the Holland & Powell system every module computes with: the ds6.36 end members
-(`endmembers`), the igneous solution models including melt and fluid (`solutions`), and the Gibbs energy
-minimizer with its oxygen buffer and warm starts (`minimize`). It came out of Magma, which now runs its
-HP engine (`magma.hp.engine`, the adapter from wt% to paths) on it. The core imports nothing from the
-modules or the shell, so it can be tested and released on its own (`python -m pytest tests/core`).
-
-Reaction can run on this core: its **Data** menu (or `REACTION_DATABASE=hp`) takes the minerals from the HP
-dataset here and the aqueous species fitted to them (Miron et al. 2016, 2017), with a bridge that keeps
-every remaining OBIGT species' own log K. OBIGT stays the default until the differences are accepted:
-[docs/reaction/HP_CORE.md](docs/reaction/HP_CORE.md) explains the design, and
-[docs/reaction/HP_COMPARISON.md](docs/reaction/HP_COMPARISON.md) (from `scripts/compare_databases.py`) lists
-every change. Next on the plan: Metamorphism runs the same minimizer on a T-P grid.
-
-## The sample file (version 1)
-
-`protolith.sample.Sample` reads and writes `.sample` files (JSON): conditions, bulk oxide composition,
-each phase with its own oxide composition and end members, melt, fluid, and which thermodynamic data made
-it. `protolith.magma_link.from_step` turns any step of a Magma run into a sample.
-`protolith.reaction_link.to_reactants` recasts its solids onto minerals in Reaction's database, ready for
-the reactant card.
-
-In the apps: Magma's results window has **Save sample** (pick a step, and the melt and rock or the
-rock alone; a fractional run saves the cumulate piled up so far). Reaction's card has **Open sample**:
-the rock goes on as minerals, the melt as a glass of its oxides, at the grams in the rock box.
-
-Inside Protolith the file can be skipped: **Send to Reaction**, next to Save sample, puts the step
-straight on Reaction's card and brings Reaction's window forward.
-
-Nothing is dropped silently: whatever Reaction has no mineral for is listed with its grams and a sentence
-for the card. Titanium now goes on as rutile, ilmenite or sphene and dissolves as Ti(OH)4, Ti(OH)3+ and
-Ti(OH)5- (`src/reaction/thermo/titanium.py`, from Knauss et al. 2001 and Antignano and Manning 2008).
-
-## On the web (Streamlit)
-
-Protolith also runs as a hosted Streamlit app. The home page links each module's two windows:
-Magma (`/magma`, `/magma-results`) and Reaction (`/reaction`, `/reaction-results`, plus `/sources`).
-Each can sit in its own browser window or screen. One private `?w=` id in the address is shared by all
-of a visitor's windows, so Magma's **Send to Reaction** puts a step straight on that visitor's Reaction
-card. **Save sample** downloads the same `.sample` file that Reaction's **Open sample** reads.
-The science code is the same as the desktop app; only the front ends (`src/*/web/`) are new.
-
-    pip install -r requirements.txt
-    streamlit run streamlit_app.py
-
-On Streamlit Community Cloud: New app, this repository, entry point `streamlit_app.py`.
-
-## Running
-
-    python -m pip install numpy scipy pytest
+    python -m pip install numpy scipy streamlit plotly pytest
     python -m pytest
 
-The Reaction tests need its reference data (EQ3/6 and CHNOSZ OBIGT files), which is never committed:
-`scripts/fetch_references.ps1` downloads it into `%LOCALAPPDATA%\Reaction\external`, the folder the
-Reaction app already uses. Without it those tests are skipped or fail with a message saying so.
+## How to cite
 
-Protolith, with every module and its home window:
+If you use Protolith in a study or a class, please cite it, and cite the dataset and solution models
+behind your result (the app's "Sources and how to cite" panel lists them). GitHub's "Cite this
+repository" button gives the reference from `CITATION.cff`:
 
-    python -m protolith.app
+> Dougalien Systems (2026) Protolith: metamorphic phase equilibria on the Holland and Powell data,
+> version 0.1.0. https://github.com/dougalien/protolith
 
-`Protolith.exe` does the same. GitHub builds it on every push to main (the "Latest Windows build"
-release) and on every pull request (an artifact of the run); `packaging\protolith\build_exe.ps1` builds
-it locally. Each module can still run on its own, from this folder:
+## License and credits
 
-    python -m magma.app
-    python -m reaction.app
+Protolith is free software under the GNU General Public License, version 3 or later (`LICENSE`).
+Anyone may use, copy, change and share it at no cost; copies and changed versions that are passed on
+must stay under the same license. It comes with no warranty.
 
-## Rules carried over from both apps
-
-- Every number comes from the solver; every datum is cited.
-- Parameter values may come from published papers and open datasets (Holland & Powell, ThermoEngine,
-  MAGEMin, OBIGT), always cited; equations are written here, and no code from those projects is copied.
+The thermodynamic data and solution models are the work of T.J.B. Holland, R. Powell, R.W. White,
+E.C.R. Green and their coauthors (Holland and Powell 2011; White et al. 2014; Green et al. 2016;
+Holland, Green and Powell 2018). Their parameter values were taken from MAGEMin (Riel, Kaus, Green and
+Berlie 2022), which is distributed under the GPL-3.0; the code here is written from the papers'
+equations. The world median pelite is from Forshaw and Pattison (2023). Mineral abbreviations follow
+Whitney and Evans (2010).

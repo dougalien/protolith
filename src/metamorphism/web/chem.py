@@ -1,4 +1,4 @@
-"""Chemical formulas with real subscripts, as the desktop app writes them (ported from Magma).
+"""Chemical formulas with real subscripts, as the desktop app writes them.
 
 SiO2, Fe2O3, Na0.21Ca0.79Al1.79Si2.21O8, Fe2+, and end-member shorthand (Fo85, An60, Ilm69) get
 subscripts; other words (QFM, Mg#, NNO+1, KLB-1, °C) are left alone, so the same function serves prose.

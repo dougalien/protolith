@@ -3,7 +3,7 @@ Geol. 32, 261-286), on the ds6.2 dataset (MnNCKFMASHTO).
 
 Written by scripts/port_magemin_mp.py from MAGEMin's sources (the ``G_SS_mp_*`` functions of
 src/TC_database/tc_gss_function.c and ``px_mp_*`` / ``obj_mp_*`` of objective_functions.c): the numbers
-are MAGEMin's, taken at Douglas's request (2026-11-03), and the form is the core's (site fractions
+are MAGEMin's (Riel et al. 2022), and the form is the core's (site fractions
 linear in the end-member proportions, or a ratio of two linear forms).  Do not edit by hand; run the
 script again.
 
