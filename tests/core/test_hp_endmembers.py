@@ -5,7 +5,6 @@ import pytest
 from scipy.optimize import brentq
 
 from protolith.core.hp.endmembers import DATA, gibbs, gibbs_j
-from magma.thermo import water
 
 
 def _s_v(name):
@@ -53,13 +52,17 @@ def test_quartz_lambda_transition():
     assert cp(860.0) == pytest.approx(cp(870.0), rel=0.02)
 
 
-@pytest.mark.parametrize("t_c,p_bar", [(700, 1000), (900, 3000), (1100, 3000)])
+# G(T, P) - G(T, 1 bar) of H2O from IAPWS-95 (Wagner and Pruss 2002), J/mol, computed with the iapws
+# Python package (IAPWS95 class, h - T s times 18.015268 g/mol)
+IAPWS95_DG = {(700, 1000): 53704.032, (900, 3000): 77018.489, (1100, 3000): 91742.608}
+
+
+@pytest.mark.parametrize("t_c,p_bar", sorted(IAPWS95_DG))
 def test_water_against_iapws(t_c, p_bar):
     """Pitzer-Sterner H2O against IAPWS-95: G(T, P) - G(T, 1 bar) within 0.25 kJ to 3 kbar."""
     t = t_c + 273.15
     hp = gibbs_j("H2O", t, p_bar) - gibbs_j("H2O", t, 1.0)
-    iapws = water.gibbs_iapws(t, p_bar) - water.gibbs_iapws(t, 1.0)
-    assert hp == pytest.approx(iapws, abs=250.0)
+    assert hp == pytest.approx(IAPWS95_DG[(t_c, p_bar)], abs=250.0)
 
 
 def test_liquid_end_member_is_finite():

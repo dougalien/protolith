@@ -1,6 +1,6 @@
 """Samples in and out of Metamorphism.
 
-``bulk_from_sample`` takes the rock to metamorphose from a ``.sample`` file (from Magma or Reaction):
+``bulk_from_sample`` takes the rock to metamorphose from a ``.sample`` file:
 the whole sample, the rock without its melt, or the melt alone (a melt crystallized at depth becomes the
 protolith).  ``to_sample`` writes one point of a Metamorphism run (a single equilibrium or a cell of a
 pseudosection) as a new sample, the source sample as its parent.

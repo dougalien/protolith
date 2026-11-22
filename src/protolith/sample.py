@@ -8,7 +8,7 @@ File layout (JSON, ``.sample``), version 1:
 
     format, version          "protolith-sample", 1
     id, parent               this sample's id, and the id of the sample it came from (or null)
-    written_by, written_at   {"app": "Magma", "version": "0.0.1"}, ISO time
+    written_by, written_at   {"app": "Protolith", "version": "0.1.0"}, ISO time
     note                     free text
     conditions               {"t_c", "p_bar", "fo2" (buffer text or null), "log_fo2" (or null)}
     bulk_wt_pct              oxide wt% of the whole sample (melt + solids + fluid), normalized to 100

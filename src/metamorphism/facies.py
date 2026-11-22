@@ -1,6 +1,6 @@
 """The background of the P-T path view: the metamorphic facies and a few reaction lines.
 
-The facies fields are schematic, after Spear (1993) and Winter (2010, fig. 25.2): facies boundaries are
+The facies fields are schematic, after Spear (1993) and Winter (2010): facies boundaries are
 gradational and depend on the rock, so they are drawn as guides only.  The reaction lines are worked out
 from the Holland and Powell data (ds6.2, the metapelite set's dataset), pure phases only:
 the Al2SiO5 polymorphs (kyanite, andalusite, sillimanite) and muscovite + quartz = K-feldspar + Al2SiO5 + H2O.

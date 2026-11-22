@@ -6,16 +6,7 @@ __pycache__/
 build/
 dist/
 
-# Third-party thermodynamic databases and reference codes are not committed, except the
-# OBIGT csv files in src/reaction/data/reference (GPL-3.0, bundled since 2026-11-04 so the
-# app carries its data; see docs/reaction/DESIGN.md, "Data policy").
-data/external/
-*.data0
-data0.*
-data1.*
-cache/
-
-# saved runs and chat sessions of the local apps
+# saved runs of the local app
 workspace/
 *.vtk
 

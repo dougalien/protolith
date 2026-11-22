@@ -2,7 +2,7 @@
 
 One HP model can stand for more than one mineral, told apart by composition: feldspar is plagioclase or
 K-feldspar, white mica muscovite, paragonite or margarite, clinopyroxene diopside-augite, omphacite,
-jadeite or pigeonite, amphibole a calcic amphibole, glaucophane or cummingtonite, the rhombohedral oxide ilmenite or
+jadeite or pigeonite, amphibole a calcic amphibole, glaucophane or cummingtonite (by its B site), the rhombohedral oxide ilmenite or
 hematite, spinel spinel or magnetite, epidote epidote or clinozoisite.
 """
 from __future__ import annotations
@@ -69,9 +69,15 @@ def abbreviation(hp: str, x: dict[str, float], c: np.ndarray) -> str:
     if hp == "ep":
         return "Czo" if x.get("cz", 0.0) > 0.5 else "Ep"
     if hp == "amp":
-        if x.get("glm", 0.0) > 0.5:
+        # by the B-site group of Hawthorne et al. (2012), the two B cations taken as Ca, then Na, then Mg-Fe-Mn
+        # (a simplified site assignment); the end-member proportions cannot be used for this, since the
+        # model's order-disorder end members take negative values
+        cat = cations(hp, c)
+        ca = cat.get("Ca", 0.0)
+        na_b = max(0.0, min(cat.get("Na", 0.0), 2.0 - ca))
+        if na_b >= 1.5:
             return "Gln"
-        if x.get("cumm", 0.0) + x.get("grnm", 0.0) > 0.5:
+        if ca < 1.5 and 2.0 - ca - na_b >= 1.5:
             return "Cum"
         return "Amp"
     if hp == "cpx":
@@ -101,13 +107,10 @@ PURE_FORMULA = {"q": "SiO2", "crst": "SiO2", "trd": "SiO2", "coe": "SiO2", "stv"
                 "ne": "NaAlSiO4", "zo": "Ca2Al3Si3O12(OH)", "fl": "H2O", "H2O": "H2O"}
 
 
-def formula(hp: str, c: np.ndarray) -> str:
-    """Cations per OXYGENS[hp] anhydrous oxygens, e.g. Ca0.85Mg0.90Fe0.21Al0.08Si1.96O6; a pure phase's
-    own formula."""
-    if hp in PURE_FORMULA:
-        return PURE_FORMULA[hp]
+def cations(hp: str, c: np.ndarray) -> dict[str, float]:
+    """Cations per OXYGENS[hp] anhydrous oxygens (all iron as Fe), or {} for a phase without a count."""
     if hp not in OXYGENS:
-        return ""
+        return {}
     fe3 = 2.0 * max(c[_I["O"]], 0.0)
     fe2 = max(c[_I["FeO"]] - fe3, 0.0)
     cat, oxy = {}, 0.0
@@ -119,10 +122,21 @@ def formula(hp: str, c: np.ndarray) -> str:
     cat["Fe"] = fe2 + fe3
     oxy += fe2 + 1.5 * fe3
     if oxy <= 0:
-        return ""
+        return {}
     f = OXYGENS[hp] / oxy
+    return {el: v * f for el, v in cat.items()}
+
+
+def formula(hp: str, c: np.ndarray) -> str:
+    """Cations per OXYGENS[hp] anhydrous oxygens, e.g. Ca0.85Mg0.90Fe0.21Al0.08Si1.96O6; a pure phase's
+    own formula."""
+    if hp in PURE_FORMULA:
+        return PURE_FORMULA[hp]
+    cat = cations(hp, c)
+    if not cat:
+        return ""
     order = ("K", "Na", "Ca", "Mg", "Fe", "Mn", "Ti", "Cr", "Al", "Si")
-    parts = [f"{el}{cat[el] * f:.2f}" for el in order if cat.get(el, 0) * f >= 0.005]
+    parts = [f"{el}{cat[el]:.2f}" for el in order if cat.get(el, 0) >= 0.005]
     return "".join(parts) + _TAIL.get(hp, f"O{OXYGENS[hp]:g}")
 
 

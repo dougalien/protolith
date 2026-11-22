@@ -22,7 +22,7 @@ import streamlit as st
 from .. import __version__
 from .. import bulk as bulk_mod
 from .. import facies
-from ..app.server import CARDS, NOTES, OXIDES, SOURCES, SYSTEM_LABEL, State
+from ..app.server import CARDS, HOW_TO_CITE, NOTES, OXIDES, REFERENCES, SOURCES, SYSTEM_LABEL, State
 from ..names import MINERALS
 from .chem import chem_text
 
@@ -106,7 +106,6 @@ def header(subtitle: str) -> None:
     st.markdown(
         f"""<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">
 <img src="{_svg('dougalien_mark.svg')}" width="34" height="34" alt="Dougalien Systems">
-<img src="{_svg('protolith_mark.svg')}" width="30" height="30" alt="">
 <span style="font-size:1.55rem;font-weight:600;color:#2B3134">Protolith</span>
 <a href="https://dougalien.com" target="_blank" style="color:#5b6468;text-decoration:none">by Dougalien Systems</a>
 <span style="color:#6f777a;font-size:0.9rem">· {subtitle}</span></div>
@@ -114,7 +113,17 @@ def header(subtitle: str) -> None:
         unsafe_allow_html=True)
 
 
+def sources() -> None:
+    with st.expander("Sources and how to cite"):
+        st.markdown("**How to cite**")
+        st.markdown(HOW_TO_CITE)
+        st.markdown("**Sources**")
+        for r in REFERENCES:
+            st.markdown(f"- {chem_text(r)}")
+
+
 def footer() -> None:
+    sources()
     st.divider()
     st.caption(f"Protolith {__version__} · beta · [Report a problem]({FEEDBACK_URL}) · Metamorphism on the "
                "Holland and Powell data; every number comes from Protolith's own solver.")

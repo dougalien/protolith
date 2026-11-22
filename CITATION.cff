@@ -1,0 +1,84 @@
+cff-version: 1.2.0
+message: "If you use Protolith in your work, please cite it as below."
+title: "Protolith: metamorphic phase equilibria on the Holland and Powell data"
+type: software
+authors:
+  - name: "Dougalien Systems"
+version: 0.1.0
+license: GPL-3.0-or-later
+repository-code: "https://github.com/dougalien/protolith"
+abstract: >-
+  Protolith computes the stable mineral assemblage of a rock at one temperature and pressure,
+  along a P-T path, or over a T-P grid (a pseudosection), by Gibbs energy minimization on the
+  Holland and Powell (2011) dataset with the metapelite solution models of White et al. (2014)
+  and the igneous set of Holland, Green and Powell (2018), with a browser interface for teaching
+  and research.
+keywords:
+  - metamorphic petrology
+  - phase equilibria
+  - pseudosection
+  - thermodynamics
+  - Gibbs energy minimization
+references:
+  - type: article
+    authors:
+      - family-names: Holland
+        given-names: T. J. B.
+      - family-names: Powell
+        given-names: R.
+    title: "An improved and extended internally consistent thermodynamic dataset for phases of petrological interest, involving a new equation of state for solids"
+    journal: "Journal of Metamorphic Geology"
+    volume: 29
+    start: 333
+    end: 383
+    year: 2011
+    doi: 10.1111/j.1525-1314.2010.00923.x
+  - type: article
+    authors:
+      - family-names: White
+        given-names: R. W.
+      - family-names: Powell
+        given-names: R.
+      - family-names: Holland
+        given-names: T. J. B.
+      - family-names: Johnson
+        given-names: T. E.
+      - family-names: Green
+        given-names: E. C. R.
+    title: "New mineral activity-composition relations for thermodynamic calculations in metapelitic systems"
+    journal: "Journal of Metamorphic Geology"
+    volume: 32
+    start: 261
+    end: 286
+    year: 2014
+    doi: 10.1111/jmg.12071
+  - type: article
+    authors:
+      - family-names: Holland
+        given-names: T. J. B.
+      - family-names: Green
+        given-names: E. C. R.
+      - family-names: Powell
+        given-names: R.
+    title: "Melting of peridotites through to granites: a simple thermodynamic model in the system KNCFMASHTOCr"
+    journal: "Journal of Petrology"
+    volume: 59
+    start: 881
+    end: 900
+    year: 2018
+    doi: 10.1093/petrology/egy048
+  - type: article
+    authors:
+      - family-names: Riel
+        given-names: N.
+      - family-names: Kaus
+        given-names: B. J. P.
+      - family-names: Green
+        given-names: E. C. R.
+      - family-names: Berlie
+        given-names: N.
+    title: "MAGEMin, an efficient Gibbs energy minimizer: application to igneous systems"
+    journal: "Geochemistry, Geophysics, Geosystems"
+    volume: 23
+    year: 2022
+    doi: 10.1029/2022GC010427

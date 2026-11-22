@@ -1,6 +1,6 @@
 """A small local web server for Protolith, the Metamorphism module's two windows (control, results).
 
-Standard library only, like Magma's and Reaction's.  Both windows follow one shared state through a
+Standard library only.  Both windows follow one shared state through a
 server-sent-event stream.  The server listens on the loopback address only and rejects requests whose
 Host or Origin is not the loopback address, so a web page you happen to have open cannot drive it.
 
@@ -32,7 +32,7 @@ from ..point import Point, components_present, equilibrium
 
 STATIC = Path(__file__).resolve().parent / "static"
 PAGES = {"/": "control.html", "/control": "control.html", "/results": "results.html"}
-DEFAULT_PORT = 8810            # Magma 8766, Reaction 8790, Protolith's home window 8800
+DEFAULT_PORT = 8810
 MAX_BODY = 200_000
 MAX_FILE = 50_000_000          # an opened pseudosection file
 MAX_POINTS = 1600
@@ -51,7 +51,7 @@ SYSTEM_LABEL = {"metapelite": "Metapelite (White et al. 2014)", "igneous": "Igne
 CARDS = [
     {"key": "barrovian-path", "title": "Barrovian pelite", "group": "path",
      "blurb": "A mudstone heated and buried on a clockwise path, greenschist to upper amphibolite: chlorite gives "
-              "way to garnet, staurolite and then kyanite or sillimanite.",
+              "way to garnet and staurolite, then kyanite with the first melt.",
      "rock": "pelite", "system": "metapelite", "water": "excess", "kind": "path",
      "path": [[450, 4], [600, 7.5], [700, 8]], "n": 16},
     {"key": "buchan-path", "title": "Low-pressure (Buchan) pelite", "group": "path",
@@ -64,12 +64,12 @@ CARDS = [
      "rock": "aluminous pelite", "system": "metapelite", "water": "excess", "kind": "path",
      "path": [[450, 5], [650, 9]], "n": 16},
     {"key": "metabasite-path", "title": "Metabasite", "group": "path",
-     "blurb": "A basalt from greenschist into amphibolite on the igneous set: amphibole and plagioclase take over.",
+     "blurb": "A basalt from 500 to 750 °C on the igneous set: hornblende and plagioclase throughout, clinopyroxene from about 590 °C and the first melt near 700 °C.",
      "rock": "metabasite", "system": "igneous", "water": "excess", "kind": "path",
      "path": [[500, 4], [750, 8]], "n": 12},
     {"key": "barrovian", "title": "Barrovian pelite", "group": "grid",
      "blurb": "A mudstone through the greenschist and amphibolite facies: chlorite gives way to garnet, "
-              "biotite and the aluminosilicates.",
+              "staurolite and the aluminosilicates.",
      "rock": "pelite", "system": "metapelite", "water": "excess", "kind": "grid",
      "t": [450, 700, 50], "p": [2, 10, 2]},
     {"key": "median", "title": "World median pelite", "group": "grid",
@@ -77,7 +77,7 @@ CARDS = [
      "rock": "world median pelite", "system": "metapelite", "water": "excess", "kind": "grid",
      "t": [400, 800, 50], "p": [2, 8, 2]},
     {"key": "metabasite", "title": "Metabasite", "group": "grid",
-     "blurb": "A basalt on the igneous set: plagioclase, amphibole and pyroxene; garnet at high pressure.",
+     "blurb": "A basalt on the igneous set: plagioclase, amphibole and clinopyroxene; garnet with melt at 10 to 12 kbar.",
      "rock": "metabasite", "system": "igneous", "water": "excess", "kind": "grid",
      "t": [500, 800, 50], "p": [2, 12, 2]},
     {"key": "chloritoid", "title": "Chloritoid schist", "group": "point",
@@ -87,7 +87,7 @@ CARDS = [
      "blurb": "The same rock at 600 °C and 8 kbar: almandine garnet and staurolite with biotite.",
      "rock": "aluminous pelite", "system": "metapelite", "water": "excess", "kind": "point", "t": 600, "p": 8},
     {"key": "sillimanite", "title": "Sillimanite gneiss", "group": "point",
-     "blurb": "A pelite at 650 °C and 5 kbar, past muscovite's best: sillimanite with biotite.",
+     "blurb": "A pelite at 650 °C and 5 kbar: sillimanite and biotite with the last of the muscovite.",
      "rock": "pelite", "system": "metapelite", "water": "excess", "kind": "point", "t": 650, "p": 5},
 ]
 
@@ -99,12 +99,58 @@ NOTES = [
     "Each cell of the diagram is one equilibrium at its center. Boundaries are drawn along cell edges, so "
     "they are stepped; a finer grid moves them closer to the true reaction lines.",
     "Fields are shaded by variance, F = C - phases + 2: the darker the field, the more degrees of freedom.",
-    "Modes are wt% of the rock without its free fluid. With water in excess, the amount of fluid means nothing.",
+    "Modes are wt% of the rock without its free fluid. With water in excess, the amount of fluid is arbitrary.",
     "A P-T path solves points spaced evenly along its line. The facies fields behind it are schematic, after "
     "Spear (1993) and Winter (2010); the Al2SiO5 and muscovite + quartz lines are worked out from ds6.2.",
     "Oxides the phase set cannot use (Cr2O3 for metapelites, MnO for the igneous set, and NiO, CoO, P2O5 "
     "and CO2 for both) are left out and listed.",
 ]
+
+
+# the works the app's numbers and methods come from (each checked against its Crossref record)
+REFERENCES = [
+    "Forshaw, J.B. and Pattison, D.R.M. (2023) Major-element geochemistry of pelites. Geology 51, 39-43. "
+    "https://doi.org/10.1130/G50542.1",
+    "Green, E.C.R., White, R.W., Diener, J.F.A., Powell, R., Holland, T.J.B. and Palin, R.M. (2016) "
+    "Activity-composition relations for the calculation of partial melting equilibria in metabasic rocks. "
+    "J. Metamorphic Geol. 34, 845-869. https://doi.org/10.1111/jmg.12211",
+    "Hawthorne, F.C., Oberti, R., Harlow, G.E., Maresch, W.V., Martin, R.F., Schumacher, J.C. and Welch, M.D. "
+    "(2012) Nomenclature of the amphibole supergroup. Am. Mineral. 97, 2031-2048. "
+    "https://doi.org/10.2138/am.2012.4276",
+    "Holland, T.J.B., Green, E.C.R. and Powell, R. (2018) Melting of peridotites through to granites: a simple "
+    "thermodynamic model in the system KNCFMASHTOCr. J. Petrology 59, 881-900. "
+    "https://doi.org/10.1093/petrology/egy048",
+    "Holland, T.J.B. and Powell, R. (1996) Thermodynamics of order-disorder in minerals, I and II. Am. Mineral. "
+    "81, 1413-1424 and 1425-1437. https://doi.org/10.2138/am-1996-11-1214",
+    "Holland, T.J.B. and Powell, R. (1998) An internally consistent thermodynamic data set for phases of "
+    "petrological interest. J. Metamorphic Geol. 16, 309-343. https://doi.org/10.1111/j.1525-1314.1998.00140.x",
+    "Holland, T.J.B. and Powell, R. (2003) Activity-composition relations for phases in petrological "
+    "calculations: an asymmetric multicomponent formulation. Contrib. Mineral. Petrol. 145, 492-501. "
+    "https://doi.org/10.1007/s00410-003-0464-z",
+    "Holland, T.J.B. and Powell, R. (2011) An improved and extended internally consistent thermodynamic dataset "
+    "for phases of petrological interest, involving a new equation of state for solids. J. Metamorphic Geol. "
+    "29, 333-383. https://doi.org/10.1111/j.1525-1314.2010.00923.x",
+    "Meija, J. and others (2016) Atomic weights of the elements 2013 (IUPAC Technical Report). Pure Appl. Chem. "
+    "88, 265-291. https://doi.org/10.1515/pac-2015-0305",
+    "Pitzer, K.S. and Sterner, S.M. (1994) Equations of state valid continuously from zero to extreme pressures "
+    "for H2O and CO2. J. Chem. Phys. 101, 3111-3116. https://doi.org/10.1063/1.467624",
+    "Powell, R. and Holland, T.J.B. (1993) On the formulation of simple mixing models for complex phases. "
+    "Am. Mineral. 78, 1174-1180.",
+    "Riel, N., Kaus, B.J.P., Green, E.C.R. and Berlie, N. (2022) MAGEMin, an efficient Gibbs energy minimizer: "
+    "application to igneous systems. Geochem. Geophys. Geosyst. 23, e2022GC010427. "
+    "https://doi.org/10.1029/2022GC010427",
+    "Spear, F.S. (1993) Metamorphic Phase Equilibria and Pressure-Temperature-Time Paths. Mineralogical Society "
+    "of America, Washington, DC.",
+    "White, R.W., Powell, R., Holland, T.J.B., Johnson, T.E. and Green, E.C.R. (2014) New mineral "
+    "activity-composition relations for thermodynamic calculations in metapelitic systems. J. Metamorphic "
+    "Geol. 32, 261-286. https://doi.org/10.1111/jmg.12071",
+    "Whitney, D.L. and Evans, B.W. (2010) Abbreviations for names of rock-forming minerals. Am. Mineral. 95, "
+    "185-187. https://doi.org/10.2138/am.2010.3371",
+    "Winter, J.D. (2010) An Introduction to Igneous and Metamorphic Petrology, 2nd edition. Prentice Hall, "
+    "Upper Saddle River, NJ.",
+]
+HOW_TO_CITE = ("Dougalien Systems (2026) Protolith: metamorphic phase equilibria on the Holland and Powell data, "
+               f"version {__version__}. https://github.com/dougalien/protolith")
 
 
 def _num(v, what: str) -> float:
@@ -265,9 +311,6 @@ class State:
         self.path_pts: list = []                             # a P-T path's points, filled stretch by stretch
         self.path: dict | None = None
         self.source_sample = None        # the sample the rock came from, the parent of samples written here
-        # Inside Protolith: a function(sample dict, take, grams) that puts a sample on Reaction's card
-        # and returns {"problems", "notes", "open"}.  None when Metamorphism runs on its own.
-        self.send_sample = None
         self._stop = threading.Event()
 
     def snapshot(self) -> dict:
@@ -282,8 +325,7 @@ class State:
                                                 "system_label": SYSTEM_LABEL[b.system], "components": c},
                 "point": None if self.point is None else point_json(self.point, c),
                 "grid": self.grid, "path": self.path, "notes": NOTES, "app_version": __version__,
-                "source": None if self.source_sample is None else _sample_summary(self.source_sample),
-                "can_send": self.send_sample is not None}
+                "source": None if self.source_sample is None else _sample_summary(self.source_sample)}
 
     def changed(self):
         with self.cond:
@@ -599,13 +641,6 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/open-pseudosection":
                 self.state.open_pseudosection(body)
                 return self._json({"ok": True})
-            if path == "/api/send-sample":
-                if self.state.send_sample is None:
-                    return self._error(404, "Send to Reaction works inside Protolith only")
-                smp = self.state.sample(int(body.get("i", 0)), int(body.get("j", 0)), False)
-                if smp is None:
-                    return self._error(404, "no point there yet")
-                return self._json(self.state.send_sample(smp.to_dict(), "rock", float(body.get("grams", 100.0))))
         except (ValueError, TypeError, KeyError) as exc:
             return self._error(400, str(exc))
         return self._error(404, "not found")
@@ -613,7 +648,7 @@ class Handler(BaseHTTPRequestHandler):
 
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = False      # as in Reaction: on Windows a shared port silently loses requests
+    allow_reuse_address = False      # on Windows a shared port silently loses requests
 
 
 def make_server(port: int = DEFAULT_PORT) -> ThreadingHTTPServer:

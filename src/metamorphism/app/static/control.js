@@ -8,7 +8,7 @@ let SAMPLE = null;          // {summary, parts} of an opened sample
 
 const SYSTEM_HINT = {
   metapelite: "For mudstones and other Al-rich rocks: garnet with spessartine, staurolite, chloritoid, cordierite, biotite, muscovite and paragonite, chlorite, the Al2SiO5 polymorphs and melt.",
-  igneous: "For basalts and other mafic or igneous rocks: Magma's minerals, with hornblende, the pyroxenes, olivine, garnet, the feldspars, spinel and melt. Leaves MnO out.",
+  igneous: "For basalts and other mafic or igneous rocks: hornblende, the pyroxenes, olivine, garnet, the feldspars, spinel and melt. Leaves MnO out.",
 };
 const WATER_HINT = {
   excess: "A free fluid stays at every point, so hydrous minerals are as stable as they can be.",
