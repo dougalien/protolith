@@ -18,6 +18,7 @@ On the web, Protolith has two windows: **Input** (a rock from a card, a preset o
 set; water from the rock or in excess; one point, a P-T path or a grid) and **Results** (the assemblage,
 modes and compositions, the path on a facies diagram, or the pseudosection). Both follow one run, so the
 Results window can sit on a second screen. Runs can be saved as CSV, and any point as a `.sample` file.
+The [user manual](docs/USER_MANUAL.md) explains every control and output, with a worked example.
 
 To run it yourself:
 

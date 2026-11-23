@@ -1,4 +1,4 @@
-"""Metamorphism from the command line, until it has a window of its own.
+"""Metamorphism from the command line.
 
     python -m metamorphism point --rock pelite --t 600 --p 6
     python -m metamorphism point --sample basalt.sample --part rock --water excess --t 550 --p 8 --save out.sample
