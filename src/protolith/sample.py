@@ -19,7 +19,7 @@ File layout (JSON, ``.sample``), version 1:
     fluid                    {"grams", "wt_pct"} or null (a fluid's species come in a later version)
     provenance               {"engine", "dataset", "run"}: which thermodynamic data made it, and how
 
-Oxide names follow Magma's list (SiO2 ... CO2), iron as FeO and Fe2O3 separately.
+Oxide names are those of OXIDE_NAMES (SiO2 ... CO2), iron as FeO and Fe2O3 separately.
 """
 from __future__ import annotations
 

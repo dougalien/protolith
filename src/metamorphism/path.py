@@ -1,7 +1,7 @@
 """A P-T path: the stable minerals at points spaced evenly along a line through a few waypoints.
 
 Much quicker than a pseudosection (a path of 16 points against a grid of a hundred or more), and the result
-reads like Magma's crystallization path: what grows and what goes as the rock heats and is buried.
+reads as a record of what grows and what goes as the rock heats and is buried.
 The path is cut into stretches that run in parallel processes; inside each stretch every point starts from
 the one before.
 """
